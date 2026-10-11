@@ -24,10 +24,21 @@ Connect the piano with a USB-OTG cable, tap **Connect piano**, and allow MIDI ac
 Orange notes = below middle C (left hand), blue = right hand.
 Open any `.mid` file and pick which tracks to practice.
 
+## Learn mode
+Tap **🎓 Learn** for three courses: *The basics* (8 lessons), *Chords* (8) and *Two hands* (7).
+Each lesson has a short explanation, a mini keyboard showing the keys and finger numbers, and a *Listen first* option.
+Score 80% to complete a lesson (★ 80%, ★★ 90%, ★★★ 97%). Progress is saved in the browser.
+In chord lessons, all the keys of a chord must be held down together.
+**Hands: Right / Left** practises one hand while the app plays the other (also works for songs and MIDI files). Only a both-hands run completes a two-hand lesson.
+
 ## Adding songs
-Edit `BUILTIN` in `index.html`. Notation: `NOTE[:beats]`, chords with `+`, `R` for a rest:
-`{title:'My song', bpm:90, src:'C4 E4 G4:2 C4+E4+G4:4 R F4'}`
+Edit `BUILTIN` in `index.html`. Notation: tokens separated by spaces; a token is notes joined with `+`, then optional `:beats` to advance (default 1). `R` = rest.
+Each note is `NAME[@finger][~beats]`: `@3` = finger number, `~4` = this note's own length (e.g. a held bass note).
+`{title:'My song', bpm:90, src:'C4@1+C3@5~4 E4@3 G4@5:2 C4+E4+G4:4 R F4'}`
+
+## Adding lessons
+Add an entry to a course in `COURSES`: `{id, title, text:[...], tip, src, bpm, mode:'wait'|'play', together:true, split:60}`.
+`split` is the MIDI note where the right hand starts (60 = middle C).
 
 ## Tuning
 Constants at the top of the script: `LOOK` (seconds visible), `WIN` (hit window), `EARLY` (how early wait mode accepts a note).
-# piano-keys-web-version

@@ -8,42 +8,84 @@
 <link rel="icon" href="icon-192.png">
 <title>Keys</title>
 <style>
-:root{--bg:#0f1220;--panel:#171b2e;--panel2:#20263f;--text:#e8eaf6;--muted:#8b90b0;--accent:#7c8cff;--left:#ffb35c;--good:#3ddc97;--bad:#ff5c7a}
+:root{--bg:#0f1220;--panel:#171b2e;--panel2:#20263f;--line:#2c3354;--text:#e8eaf6;--muted:#8b90b0;--accent:#7c8cff;--left:#ffb35c;--good:#3ddc97;--bad:#ff5c7a;--star:#ffd166}
 *{box-sizing:border-box}
-html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font:14px/1.3 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;overflow:hidden}
+[hidden]{display:none!important}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font:14px/1.35 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;overflow:hidden}
 #app{display:flex;flex-direction:column;height:100dvh}
 header{background:var(--panel);padding:6px 8px;padding-left:max(8px,env(safe-area-inset-left));padding-right:max(8px,env(safe-area-inset-right))}
 .row{display:flex;gap:6px;align-items:center;overflow-x:auto;white-space:nowrap;scrollbar-width:none}
 .row::-webkit-scrollbar{display:none}
-select,button,.file{background:var(--panel2);color:var(--text);border:1px solid #2c3354;border-radius:8px;padding:7px 10px;font:inherit;cursor:pointer;flex:none}
+select,button,.file{background:var(--panel2);color:var(--text);border:1px solid var(--line);border-radius:8px;padding:7px 10px;font:inherit;cursor:pointer;flex:none}
 button[aria-pressed="false"]{opacity:.45}
 .primary{background:var(--accent);border-color:var(--accent);color:#0b0e1a;font-weight:600;min-width:84px}
+.learnbtn{border-color:var(--accent);color:var(--accent);font-weight:600}
 .chip.on{border-color:var(--good);color:var(--good)}
 #tracks{display:flex;gap:10px;flex-wrap:wrap;padding:6px 2px 2px;color:var(--muted)}
-#tracks[hidden]{display:none}
 #tracks label{display:flex;gap:4px;align-items:center}
 main{position:relative;flex:1;min-height:0}
 canvas{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none}
-#hud{position:absolute;top:10px;left:12px;font-weight:600;font-variant-numeric:tabular-nums;pointer-events:none;text-shadow:0 1px 3px #000}
+#hud{position:absolute;top:10px;left:12px;right:12px;font-weight:600;font-variant-numeric:tabular-nums;pointer-events:none;text-shadow:0 1px 3px #000}
 #hud small{display:block;color:var(--muted);font-weight:400}
-#msg{position:absolute;left:0;right:0;top:30%;text-align:center;color:var(--muted);font-size:18px;pointer-events:none}
-#result{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(10,12,22,.75)}
-#result[hidden]{display:none}
-.card{background:var(--panel);border-radius:14px;padding:20px 24px;text-align:center;min-width:240px}
+#hud .tip{color:var(--text);opacity:.8;max-width:520px;white-space:normal}
+#msg{position:absolute;left:16px;right:16px;top:30%;text-align:center;color:var(--muted);font-size:18px;pointer-events:none}
+.overlay{position:absolute;inset:0;display:flex;background:rgba(10,12,22,.78);padding:12px 16px;overflow:auto;z-index:5}
+.card{background:var(--panel);border-radius:14px;padding:18px 22px;text-align:center;min-width:240px;max-width:560px;margin:auto}
 .card .big{font-size:44px;font-weight:700;color:var(--good)}
 .card p{color:var(--muted);margin:6px 0 14px}
+.btns{display:flex;gap:8px;justify-content:center;flex-wrap:wrap}
+.stars{color:var(--star);font-size:26px;letter-spacing:2px}
+.stars .off{color:#3a4064}
+
+/* Learn screen */
+#learn{position:fixed;inset:0;background:var(--bg);overflow:auto;z-index:10;padding:0 max(16px,env(safe-area-inset-right)) 24px max(16px,env(safe-area-inset-left))}
+#learn .top{position:sticky;top:0;background:var(--bg);display:flex;align-items:center;gap:10px;padding:12px 0 10px;z-index:1}
+#learn h1{font-size:20px;margin:0;flex:1}
+.courses{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px}
+.course{background:var(--panel);border-radius:14px;padding:12px}
+.course h2{margin:0;font-size:16px}
+.course .sub{color:var(--muted);margin:2px 0 8px;font-size:13px}
+.bar{height:4px;background:var(--panel2);border-radius:2px;overflow:hidden;margin-bottom:8px}
+.bar i{display:block;height:100%;background:var(--good)}
+.lesson{display:flex;align-items:center;gap:10px;width:100%;text-align:left;margin:5px 0;padding:8px 10px;white-space:normal}
+.lesson .num{flex:none;width:24px;height:24px;border-radius:50%;display:grid;place-items:center;background:var(--bg);color:var(--muted);font-size:12px;font-weight:700}
+.lesson.done .num{background:var(--good);color:#0b0e1a}
+.lesson.next{border-color:var(--accent)}
+.lesson.next .num{background:var(--accent);color:#0b0e1a}
+.lesson .t{flex:1}
+.lesson .s{color:var(--star);font-size:12px;letter-spacing:1px}
+
+/* Lesson intro */
+#intro{position:fixed;z-index:11}
+.intro{text-align:left}
+.intro .kicker{color:var(--accent);font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.06em}
+.intro h2{margin:4px 0 6px;font-size:22px}
+.intro p{color:var(--text);opacity:.85;margin:6px 0}
+.mini{margin:12px 0;overflow-x:auto;text-align:center}
+.mini svg{max-width:100%;height:auto}
+.meta{color:var(--muted);font-size:13px;margin:6px 0 12px}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;margin:4px 0 10px}
+.seg button{border:0;border-radius:0;background:transparent;opacity:1}
+.seg button.on{background:var(--panel2);color:var(--accent);font-weight:600}
+.intro .btns{justify-content:flex-start}
 </style>
 </head>
 <body>
 <div id="app">
   <header>
     <div class="row">
+      <button id="learnBtn" class="learnbtn">🎓 Learn</button>
       <select id="song" aria-label="Song"></select>
       <label class="file">Open .mid<input type="file" id="file" accept=".mid,.midi,audio/midi,audio/x-midi" hidden></label>
       <select id="mode" aria-label="Mode">
         <option value="wait">Wait for me</option>
         <option value="play">Play along</option>
         <option value="listen">Listen</option>
+      </select>
+      <select id="hands" aria-label="Hands">
+        <option value="both">Both hands</option>
+        <option value="right">Right hand</option>
+        <option value="left">Left hand</option>
       </select>
       <select id="speed" aria-label="Speed">
         <option value="0.25">25%</option><option value="0.5">50%</option><option value="0.75">75%</option>
@@ -52,7 +94,7 @@ canvas{position:absolute;inset:0;width:100%;height:100%;display:block;touch-acti
       <button id="play" class="primary">▶ Start</button>
       <button id="restart" title="Restart">↺</button>
       <button id="sound" aria-pressed="false" title="Hear the song while playing along">🔊</button>
-      <button id="labels" aria-pressed="true" title="Note names">A–G</button>
+      <button id="labels" aria-pressed="true" title="Note names and finger numbers">A–G</button>
       <button id="fs" title="Fullscreen">⛶</button>
       <button id="midi" class="chip">Connect piano</button>
     </div>
@@ -62,17 +104,23 @@ canvas{position:absolute;inset:0;width:100%;height:100%;display:block;touch-acti
     <canvas id="cv"></canvas>
     <div id="hud"></div>
     <div id="msg"></div>
-    <div id="result" hidden>
+    <div id="result" class="overlay" hidden>
       <div class="card">
         <div id="resTitle"></div>
+        <div id="resStars" class="stars"></div>
         <div class="big" id="resAcc"></div>
         <p id="resDetail"></p>
-        <button id="again" class="primary">Again</button>
-        <button id="close">Close</button>
+        <div class="btns" id="resBtns"></div>
       </div>
     </div>
   </main>
 </div>
+
+<div id="learn" hidden>
+  <div class="top"><h1>🎓 Learn</h1><button id="learnClose">Close</button></div>
+  <div class="courses" id="courses"></div>
+</div>
+<div id="intro" class="overlay" hidden><div class="card intro" id="introCard"></div></div>
 
 <script>
 'use strict';
@@ -81,19 +129,14 @@ const LEAD = 2.5;      // seconds of song-time before the first note
 const LOOK = 3;        // seconds of song-time visible above the keyboard
 const WIN = 0.25;      // play-along hit window (song seconds, either side)
 const EARLY = 1.0;     // wait mode: how early a note may be played
+const PASS = 80;       // % needed to complete a lesson
 const NAMES = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
 
-/* ---------- Built-in songs (public domain) ----------
-   Notation: NOTE[:beats], chords joined with +, R = rest. */
-const BUILTIN = [
-  {title:'C major scale', bpm:80, src:'C4 D4 E4 F4 G4 A4 B4 C5 B4 A4 G4 F4 E4 D4 C4:2'},
-  {title:'Mary Had a Little Lamb', bpm:90, src:'E4 D4 C4 D4 E4 E4 E4:2 D4 D4 D4:2 E4 G4 G4:2 E4 D4 C4 D4 E4 E4 E4 E4 D4 D4 E4 D4 C4:4'},
-  {title:'Twinkle Twinkle', bpm:90, src:'C4 C4 G4 G4 A4 A4 G4:2 F4 F4 E4 E4 D4 D4 C4:2 G4 G4 F4 F4 E4 E4 D4:2 G4 G4 F4 F4 E4 E4 D4:2 C4 C4 G4 G4 A4 A4 G4:2 F4 F4 E4 E4 D4 D4 C4:2'},
-  {title:'Ode to Joy', bpm:100, src:'E4 E4 F4 G4 G4 F4 E4 D4 C4 C4 D4 E4 E4:1.5 D4:0.5 D4:2 E4 E4 F4 G4 G4 F4 E4 D4 C4 C4 D4 E4 D4:1.5 C4:0.5 C4:2'},
-  {title:'Ode to Joy (both hands)', bpm:84, src:'E4+C3 E4 F4 G4 G4+G3 F4 E4 D4 C4+C3 C4 D4 E4 E4+G3:1.5 D4:0.5 D4:2 E4+C3 E4 F4 G4 G4+G3 F4 E4 D4 C4+C3 C4 D4 E4 D4+G3:1.5 C4:0.5 C4+C3:2'},
-  {title:'Für Elise (opening)', bpm:150, src:'E5 D#5 E5 D#5 E5 B4 D5 C5 A4:2 R C4 E4 A4 B4:2 R E4 G#4 B4 C5:2 R E4 E5 D#5 E5 D#5 E5 B4 D5 C5 A4:2 R C4 E4 A4 B4:2 R E4 C5 B4 A4:3'},
-];
-
+/* ---------- Notation ----------
+   Tokens separated by spaces. A token is one or more notes joined with +,
+   optionally followed by :beats (how far to advance, default 1). R = rest.
+   Each note: NAME[@finger][~beats]   e.g.  C4@1   E4@3~2   C3@5~4+E4@3:1
+   ~beats gives that note its own length (for held bass notes under a melody). */
 function nameToMidi(s){
   const m = /^([A-G])(#|b)?(-?\d)$/.exec(s);
   if(!m) throw new Error('Bad note: '+s);
@@ -104,12 +147,161 @@ function nameToMidi(s){
 function parseNotation(src,bpm){
   const spb = 60/bpm, out=[]; let beat=0;
   for(const tok of src.trim().split(/\s+/)){
-    const [p,d] = tok.split(':'); const beats = d ? parseFloat(d) : 1;
-    if(p!=='R') for(const n of p.split('+')) out.push({midi:nameToMidi(n), start:beat*spb, dur:beats*spb*0.92});
-    beat += beats;
+    const ci = tok.lastIndexOf(':');
+    const body = ci>=0 ? tok.slice(0,ci) : tok, adv = ci>=0 ? parseFloat(tok.slice(ci+1)) : 1;
+    if(body!=='R') for(const part of body.split('+')){
+      const m = /^([A-G][#b]?-?\d)(?:@(\d))?(?:~([\d.]+))?$/.exec(part);
+      if(!m) throw new Error('Bad note: '+part);
+      const len = m[3] ? parseFloat(m[3]) : adv;
+      out.push({midi:nameToMidi(m[1]), start:beat*spb, dur:len*spb*0.92, finger:m[2]?+m[2]:undefined});
+    }
+    beat += adv;
   }
   return out;
 }
+
+/* ---------- Built-in songs (public domain) ---------- */
+const BUILTIN = [
+  {title:'C major scale', bpm:80, src:'C4 D4 E4 F4 G4 A4 B4 C5 B4 A4 G4 F4 E4 D4 C4:2'},
+  {title:'Mary Had a Little Lamb', bpm:90, src:'E4 D4 C4 D4 E4 E4 E4:2 D4 D4 D4:2 E4 G4 G4:2 E4 D4 C4 D4 E4 E4 E4 E4 D4 D4 E4 D4 C4:4'},
+  {title:'Twinkle Twinkle', bpm:90, src:'C4 C4 G4 G4 A4 A4 G4:2 F4 F4 E4 E4 D4 D4 C4:2 G4 G4 F4 F4 E4 E4 D4:2 G4 G4 F4 F4 E4 E4 D4:2 C4 C4 G4 G4 A4 A4 G4:2 F4 F4 E4 E4 D4 D4 C4:2'},
+  {title:'Ode to Joy', bpm:100, src:'E4 E4 F4 G4 G4 F4 E4 D4 C4 C4 D4 E4 E4:1.5 D4:0.5 D4:2 E4 E4 F4 G4 G4 F4 E4 D4 C4 C4 D4 E4 D4:1.5 C4:0.5 C4:2'},
+  {title:'Ode to Joy (both hands)', bpm:84, src:'E4+C3 E4 F4 G4 G4+G3 F4 E4 D4 C4+C3 C4 D4 E4 E4+G3:1.5 D4:0.5 D4:2 E4+C3 E4 F4 G4 G4+G3 F4 E4 D4 C4+C3 C4 D4 E4 D4+G3:1.5 C4:0.5 C4+C3:2'},
+  {title:'Für Elise (opening)', bpm:150, src:'E5 D#5 E5 D#5 E5 B4 D5 C5 A4:2 R C4 E4 A4 B4:2 R E4 G#4 B4 C5:2 R E4 E5 D#5 E5 D#5 E5 B4 D5 C5 A4:2 R C4 E4 A4 B4:2 R E4 C5 B4 A4:3'},
+];
+
+/* ---------- Courses ----------
+   Lesson fields: id, title, text[] (intro paragraphs, may contain <b>), tip (shown while playing),
+   src, bpm, mode ('wait' | 'play'), split (MIDI note where the right hand starts, default 60 = middle C),
+   together (chord notes must be held down at the same time). */
+const LH = (notes,len)=>notes.split(' ').map(n=>n+'~'+len).join('+');   // left-hand chord helper
+const C_LH = f=>LH('C3@5 E3@3 G3@1',f), G_LH = f=>LH('B2@5 D3@3 G3@1',f), F_LH = f=>LH('C3@5 F3@2 A3@1',f);
+
+const COURSES = [
+ {id:'b', icon:'🌱', title:'The basics', sub:'Find your way around the keyboard', lessons:[
+  {id:'b1', title:'Meet middle C', bpm:80,
+   text:['<b>Middle C</b> is the white key just to the left of the group of <b>two black keys</b>, near the middle of your piano.',
+         'Play it with your right thumb every time a note reaches the line. The song waits for you.'],
+   tip:'Right thumb on middle C.',
+   src:'C4@1:2 C4@1:2 C4@1 C4@1 C4@1:2 C4@1 C4@1 C4@1 C4@1 C4@1:4'},
+  {id:'b2', title:'Five fingers, right hand', bpm:80,
+   text:['Fingers are numbered <b>1 (thumb)</b> to <b>5 (pinky)</b>. Put your thumb on C and give each finger its own key, up to G.',
+         'This is the <b>C position</b>. Keep your fingers curved, like holding a ball.'],
+   tip:'One finger per key: C D E F G = 1 2 3 4 5.',
+   src:'C4@1 D4@2 E4@3 F4@4 G4@5:2 G4@5 F4@4 E4@3 D4@2 C4@1:2 C4@1 D4@2 E4@3 F4@4 G4@5 F4@4 E4@3 D4@2 C4@1:4'},
+  {id:'b3', title:'Finger hops', bpm:80,
+   text:['Now skip a key each time: C to E, D to F, E to G. Your hand stays still and only the fingers move.'],
+   tip:'Keep your hand in C position. Don\'t look for new keys.',
+   src:'C4@1 E4@3 D4@2 F4@4 E4@3 G4@5:2 G4@5 E4@3 F4@4 D4@2 E4@3 C4@1:2 C4@1 E4@3 G4@5:2 E4@3 C4@1:2'},
+  {id:'b4', title:'Five fingers, left hand', bpm:80,
+   text:['Move to the C <b>below</b> middle C. Your left hand is a mirror image: the <b>pinky (5)</b> is on C and the <b>thumb (1)</b> on G.',
+         'Left-hand notes are <b style="color:var(--left)">orange</b>.'],
+   tip:'Left pinky on C, thumb on G.',
+   src:'C3@5 D3@4 E3@3 F3@2 G3@1:2 G3@1 F3@2 E3@3 D3@4 C3@5:2 C3@5 E3@3 G3@1:2 E3@3 C3@5:2'},
+  {id:'b5', title:'The black keys', bpm:80,
+   text:['Black keys come in groups of <b>two</b> and <b>three</b>. A <b>sharp (#)</b> is the black key just to the right of a white key, so C# sits between C and D.',
+         'Play the group of two, then the group of three.'],
+   tip:'Groups of two, then three.',
+   src:'C#4@2 D#4@3 C#4@2 D#4@3:2 F#4@2 G#4@3 A#4@4:2 A#4@4 G#4@3 F#4@2:2 C#4@2 D#4@3 F#4@2 G#4@3 A#4@4:2'},
+  {id:'b6', title:'Keeping the beat', bpm:66, mode:'play',
+   text:['From now on the music <b>doesn\'t wait</b>. Play each note right when it reaches the line.',
+         'Long notes last 2 or 4 beats, so hold them down and count out loud: <b>1 – 2 – 3 – 4</b>.'],
+   tip:'Count 1-2-3-4. Long bars mean hold.',
+   src:'C4@1 C4@1 C4@1 C4@1 E4@3:2 E4@3:2 G4@5:4 E4@3:2 D4@2:2 C4@1:4'},
+  {id:'b7', title:'The C major scale', bpm:80,
+   text:['A scale is eight notes from C up to the next C. You only have five fingers, so after E (finger 3) <b>tuck your thumb under</b> to play F, then continue 2-3-4-5.',
+         'On the way down, cross finger 3 over your thumb after F.'],
+   tip:'Thumb under after E, finger 3 over on the way down.',
+   src:'C4@1 D4@2 E4@3 F4@1 G4@2 A4@3 B4@4 C5@5:2 C5@5 B4@4 A4@3 G4@2 F4@1 E4@3 D4@2 C4@1:2'},
+  {id:'b8', title:'First song: Mary had a little lamb', bpm:90,
+   text:['Time for a real song. Everything stays in C position, so just follow the finger numbers.'],
+   tip:'C position: thumb on C.',
+   src:'E4@3 D4@2 C4@1 D4@2 E4@3 E4@3 E4@3:2 D4@2 D4@2 D4@2:2 E4@3 G4@5 G4@5:2 E4@3 D4@2 C4@1 D4@2 E4@3 E4@3 E4@3 E4@3 D4@2 D4@2 E4@3 D4@2 C4@1:4'},
+ ]},
+ {id:'c', icon:'🎶', title:'Chords', sub:'Play several notes at once', lessons:[
+  {id:'c1', title:'Your first chord: C major', bpm:70, together:true,
+   text:['A <b>chord</b> is three or more notes played together. <b>C major = C + E + G</b>: skip a white key between each note.',
+         'Use fingers <b>1 – 3 – 5</b> and press all three keys down <b>at the same moment</b>.'],
+   tip:'C + E + G, fingers 1-3-5, all at once.',
+   src:'C4@1+E4@3+G4@5:2 R C4@1+E4@3+G4@5:2 R C4@1+E4@3+G4@5 C4@1+E4@3+G4@5 C4@1+E4@3+G4@5:2 C4@1+E4@3+G4@5:4'},
+  {id:'c2', title:'F and G major', bpm:70, together:true,
+   text:['Keep the same hand shape and slide it along. <b>F major = F A C</b> and <b>G major = G B D</b>.',
+         'Major chords all have this skip-a-key shape on the white keys.'],
+   tip:'Same shape, slide it: C → F → G.',
+   src:'C4@1+E4@3+G4@5:2 F4@1+A4@3+C5@5:2 F4@1+A4@3+C5@5:2 C4@1+E4@3+G4@5:2 G4@1+B4@3+D5@5:2 G4@1+B4@3+D5@5:2 C4@1+E4@3+G4@5:4'},
+  {id:'c3', title:'Progression: C – F – G – C', bpm:76, together:true,
+   text:['Most songs use only a handful of chords played in a pattern called a <b>progression</b>.',
+         '<b>C – F – G – C</b> (called I – IV – V – I) is the most common one in music.'],
+   tip:'I – IV – V – I. Move the whole hand together.',
+   src:'C4@1+E4@3+G4@5:2 C4@1+E4@3+G4@5:2 F4@1+A4@3+C5@5:2 F4@1+A4@3+C5@5:2 G4@1+B4@3+D5@5:2 G4@1+B4@3+D5@5:2 C4@1+E4@3+G4@5:4 C4@1+E4@3+G4@5 F4@1+A4@3+C5@5 G4@1+B4@3+D5@5 C4@1+E4@3+G4@5:4'},
+  {id:'c4', title:'Minor chords', bpm:70, together:true,
+   text:['Move the <b>middle note down one key</b> and a major chord becomes <b>minor</b>, which sounds darker and sadder. Listen to C major, then C minor (C E♭ G).',
+         'Some chords are minor on the white keys alone: <b>A minor (A C E)</b>, <b>D minor (D F A)</b> and <b>E minor (E G B)</b>.'],
+   tip:'Major → minor: middle note one key down.',
+   src:'C4@1+E4@3+G4@5:2 C4@1+Eb4@3+G4@5:2 C4@1+E4@3+G4@5:2 C4@1+Eb4@3+G4@5:2 A4@1+C5@3+E5@5:2 D4@1+F4@3+A4@5:2 E4@1+G4@3+B4@5:2 A4@1+C5@3+E5@5:4'},
+  {id:'c5', title:'Inversions: less jumping', bpm:70, together:true, split:48,
+   text:['A chord\'s notes can be stacked in any order. These <b>inversions</b> let you change chords while barely moving your hand.',
+         '<b>C</b> (C E G) → <b>F</b> (C F A) → <b>G</b> (B D G) → <b>C</b>. Look for the notes that stay put.'],
+   tip:'Keep common notes. Move only the fingers that must move.',
+   src:'C4@1+E4@3+G4@5:2 C4@1+F4@2+A4@5:2 B3@1+D4@2+G4@5:2 C4@1+E4@3+G4@5:2 C4@1+E4@3+G4@5 C4@1+F4@2+A4@5 B3@1+D4@2+G4@5 C4@1+E4@3+G4@5:4'},
+  {id:'c6', title:'The pop progression', bpm:80, together:true, split:48,
+   text:['<b>C – G – Am – F</b> powers hundreds of pop songs. With inversions your hand hardly moves.',
+         'C (C E G) · G (B D G) · Am (C E A) · F (C F A).'],
+   tip:'C – G – Am – F, then repeat.',
+   src:'C4@1+E4@3+G4@5:2 B3@1+D4@2+G4@5:2 C4@1+E4@2+A4@5:2 C4@1+F4@2+A4@5:2 C4@1+E4@3+G4@5:2 B3@1+D4@2+G4@5:2 C4@1+E4@2+A4@5:2 C4@1+F4@2+A4@5:2 C4@1+E4@3+G4@5:4'},
+  {id:'c7', title:'Broken chords', bpm:90,
+   text:['Chords don\'t have to be played all at once. Playing the notes one after another is called a <b>broken chord</b> or <b>arpeggio</b>.',
+         'Keep your hand in the chord shape and let the fingers roll.'],
+   tip:'Hold the chord shape and play the notes one by one.',
+   src:'C4@1 E4@3 G4@5 E4@3 C4@1 E4@3 G4@5 E4@3 F4@1 A4@3 C5@5 A4@3 G4@1 B4@3 D5@5 B4@3 C4@1 E4@3 G4@5 E4@3 C4@1+E4@3+G4@5:4'},
+  {id:'c8', title:'Left-hand chords', bpm:70, together:true,
+   text:['Now try the chords with your <b>left hand</b> below middle C. These shapes will soon accompany your right-hand melodies.',
+         '<b>C</b> (C E G, fingers 5-3-1) · <b>F</b> (C F A, 5-2-1) · <b>G</b> (B D G, 5-3-1).'],
+   tip:'Left hand: C – F – C – G – C.',
+   src:'C3@5+E3@3+G3@1:2 C3@5+F3@2+A3@1:2 C3@5+E3@3+G3@1:2 B2@5+D3@3+G3@1:2 C3@5+E3@3+G3@1:2 C3@5+F3@2+A3@1:2 B2@5+D3@3+G3@1:2 C3@5+E3@3+G3@1:4'},
+ ]},
+ {id:'h', icon:'🙌', title:'Two hands', sub:'Get your hands working together', lessons:[
+  {id:'h1', title:'Taking turns', bpm:80,
+   text:['Right hand in C position at middle C, left hand in C position one octave lower. The hands <b>take turns</b>, so only one plays at a time.',
+         'Tip: use the <b>Right / Left</b> buttons to practise one hand while the app plays the other.'],
+   tip:'Right hand, then left hand.',
+   src:'C4@1 E4@3 G4@5:2 C3@5 E3@3 G3@1:2 G4@5 E4@3 C4@1:2 G3@1 E3@3 C3@5:2 C4@1 D4@2 E4@3 F4@4 G4@5:2 G3@1 F3@2 E3@3 D3@4 C3@5:2'},
+  {id:'h2', title:'Together, same direction', bpm:66,
+   text:['Both hands play the <b>same notes, one octave apart</b>, at the same time.',
+         'The fingers are different: the right hand starts on its thumb (1) and the left on its pinky (5).'],
+   tip:'Same notes, both hands, one octave apart.',
+   src:'C3@5+C4@1 D3@4+D4@2 E3@3+E4@3 F3@2+F4@4 G3@1+G4@5:2 F3@2+F4@4 E3@3+E4@3 D3@4+D4@2 C3@5+C4@1:2 C3@5+C4@1 E3@3+E4@3 G3@1+G4@5:2 C3@5+C4@1:2'},
+  {id:'h3', title:'Mirror image', bpm:66,
+   text:['Now the hands <b>move apart</b>: the right hand goes up while the left hand goes down.',
+         'Both hands use the <b>same finger</b> at the same time, which feels natural.'],
+   tip:'Mirror: same fingers, opposite directions.',
+   src:'C3@1+C4@1 B2@2+D4@2 A2@3+E4@3 G2@4+F4@4 F2@5+G4@5:2 G2@4+F4@4 A2@3+E4@3 B2@2+D4@2 C3@1+C4@1:2'},
+  {id:'h4', title:'Melody over a bass note', bpm:84,
+   text:['The right hand plays <b>Twinkle Twinkle</b> while the left hand plays one long bass note at a time and <b>holds it down</b>.',
+         'Practise each hand alone first if it feels tricky.'],
+   tip:'Left hand: press and hold while the right hand keeps moving.',
+   src:'C4@1+C3@5~4 C4@1 G4@4 G4@4 A4@5+F3@2~2 A4@5 G4@4+C3@5:2 F4@4+F3@2~2 F4@4 E4@3+C3@5~2 E4@3 D4@2+G3@1~2 D4@2 C4@1+C3@5:2'},
+  {id:'h5', title:'Melody with left-hand chords', bpm:84,
+   text:['<b>Ode to Joy</b> with left-hand chords on the first beat of every bar: <b>C</b> (C E G) and <b>G</b> (B D G), as in the Chords course.',
+         'Press the chord together with the melody note, then hold it.'],
+   tip:'Chord on beat 1, then hold it.',
+   src:`E4@3+${C_LH(4)} E4@3 F4@4 G4@5 G4@5+${G_LH(4)} F4@4 E4@3 D4@2 C4@1+${C_LH(4)} C4@1 D4@2 E4@3 E4@3+${G_LH(4)}:1.5 D4@2:0.5 D4@2:2 `+
+       `E4@3+${C_LH(4)} E4@3 F4@4 G4@5 G4@5+${G_LH(4)} F4@4 E4@3 D4@2 C4@1+${C_LH(4)} C4@1 D4@2 E4@3 D4@2+${G_LH(2)}:1.5 C4@1:0.5 C4@1+${C_LH(2)}:2`},
+  {id:'h6', title:'Jingle Bells', bpm:100,
+   text:['A full song with both hands. The right hand stays in C position the whole time and the left hand plays long bass notes.',
+         'Practise <b>right hand</b>, then <b>left hand</b>, then <b>both</b>. Only a both-hands run completes the lesson.'],
+   tip:'Right hand in C position. Left hand holds the bass notes.',
+   src:'E4@3+C3@5~4 E4@3 E4@3:2 E4@3+G3@1~4 E4@3 E4@3:2 E4@3+C3@5~4 G4@5 C4@1:1.5 D4@2:0.5 E4@3+C3@5~4:4 '+
+       'F4@4+F3@2~4 F4@4 F4@4:1.5 F4@4:0.5 F4@4+C3@5~4 E4@3 E4@3 E4@3:0.5 E4@3:0.5 E4@3+G3@1~4 D4@2 D4@2 E4@3 D4@2+G3@1~4:2 G4@5:2'},
+  {id:'h7', title:'Broken-chord accompaniment', bpm:90,
+   text:['The left hand plays a rolling pattern: <b>bottom – top – middle – top</b> of each chord. Pianists have used it for centuries.',
+         'Meanwhile the right hand holds long melody notes. Let the left hand keep a steady pulse.'],
+   tip:'Left hand: bottom – top – middle – top.',
+   src:'E4@3~4+C3@5 G3@1 E3@3 G3@1 F4@4~4+C3@5 A3@1 F3@2 A3@1 D4@2~4+B2@5 G3@1 D3@3 G3@1 C4@1~4+C3@5 G3@1 E3@3 G3@1 '+
+       'G4@5~4+C3@5 G3@1 E3@3 G3@1 A4@5~4+C3@5 A3@1 F3@2 A3@1 G4@5~2+B2@5 G3@1 F4@4~2+D3@3 G3@1 E4@3~4+C3@5 G3@1 E3@3 G3@1 C3@5+E4@3+G4@5:4'},
+ ]},
+];
+const ALL_LESSONS = COURSES.flatMap(c=>c.lessons.map((l,i)=>Object.assign(l,{course:c, idx:i})));
 
 /* ---------- Standard MIDI file parser ---------- */
 function parseMidiFile(buf){
@@ -160,10 +352,11 @@ const $=s=>document.querySelector(s);
 const cv=$('#cv'), cx=cv.getContext('2d');
 const css=getComputedStyle(document.documentElement), col=k=>css.getPropertyValue(k).trim();
 const C={bg:col('--bg'),accent:col('--accent'),left:col('--left'),good:col('--good'),bad:col('--bad'),muted:col('--muted'),text:col('--text')};
+const OTHER='#4a5070';           // notes the app plays for the hand you're not practising
 
 let song=null, notes=[], groups=[], gi=0, si=0, songEnd=0;
-let t=-LEAD, playing=false, finished=false, waiting=false, mode='wait', speed=1;
-let soundOn=false, labelsOn=true, lastTs=0, midiFile=null;
+let t=-LEAD, playing=false, finished=false, waiting=false, mode='wait', speed=1, hands='both';
+let soundOn=false, labelsOn=true, lastTs=0, midiFile=null, lesson=null, together=false;
 let stats; resetStats();
 const held=new Map();            // midi -> true (correct) | false (wrong) | null (neutral)
 let lo=48, hi=84, W=0, H=0, kbTop=0, kbH=0, ww=1, whites=[], whiteIdx={};
@@ -171,11 +364,13 @@ const isBlack=m=>[1,3,6,8,10].includes(m%12);
 
 function resetStats(){ stats={hit:0,miss:0,wrong:0,streak:0,bestStreak:0}; }
 function accuracy(){ const tot=stats.hit+stats.miss+stats.wrong; return tot? Math.round(100*stats.hit/tot) : 100; }
+const wants=n=> mode!=='listen' && (hands==='both' || (hands==='right')===(n.hand==='R'));
 
 /* ---------- Song loading ---------- */
 function loadSong(s){
-  song=s;
-  notes = s.notes.map(n=>({...n})).sort((a,b)=>a.start-b.start||a.midi-b.midi);
+  song=s; together=!!s.together;
+  const split=s.split||60;
+  notes = s.notes.map(n=>({...n, hand:n.midi<split?'L':'R'})).sort((a,b)=>a.start-b.start||a.midi-b.midi);
   groups=[];
   for(const n of notes){ const g=groups[groups.length-1]; if(g && n.start-g.start<0.06) g.notes.push(n); else groups.push({start:n.start, notes:[n]}); }
   songEnd = notes.reduce((m,n)=>Math.max(m,n.start+n.dur),0);
@@ -187,15 +382,16 @@ function loadSong(s){
   restart();
 }
 function restart(){
-  for(const n of notes){ n.hit=false; n.missed=false; n.auto=false; }
+  for(const n of notes){ n.hit=false; n.missed=false; n.auto=false; n.req=wants(n); }
   gi=0; si=0; t=-LEAD; playing=false; finished=false; waiting=false;
-  resetStats(); $('#result').hidden=true; updateUI();
+  held.clear(); resetStats(); $('#result').hidden=true; updateUI();
 }
 function setRange(a,b){
   lo=Math.max(21,a); hi=Math.min(108,b); whites=[]; whiteIdx={};
   for(let m=lo;m<=hi;m++) if(!isBlack(m)){ whiteIdx[m]=whites.length; whites.push(m); }
   layout();
 }
+function advanceGroups(){ while(gi<groups.length && groups[gi].notes.every(n=>n.hit||!n.req)) gi++; }
 
 /* ---------- Layout & geometry ---------- */
 function layout(){
@@ -215,7 +411,7 @@ function keyAt(x,y){
   return whites[Math.min(whites.length-1, Math.max(0, Math.floor(x/ww)))];
 }
 
-/* ---------- Audio (for touch, computer keyboard, Listen mode) ---------- */
+/* ---------- Audio ---------- */
 let ac=null;
 function audio(){ if(!ac) ac=new (window.AudioContext||window.webkitAudioContext)(); if(ac.state==='suspended') ac.resume(); return ac; }
 function tone(m,dur=0.6,vel=0.6){
@@ -231,22 +427,30 @@ function tone(m,dur=0.6,vel=0.6){
 }
 
 /* ---------- Input handling ---------- */
+function score(n){ n.hit=true; stats.hit++; stats.streak++; }
 function noteOn(m, src){
   if(src!=='midi') tone(m,0.8);
+  held.set(m,null);
   let ok=null;
   if(playing && mode==='wait'){
+    advanceGroups();
     const g=groups[gi];
     if(g){
-      if(g.start-t<=EARLY){
-        const n=g.notes.find(n=>n.midi===m && !n.hit);
-        if(n){ n.hit=true; ok=true; stats.hit++; stats.streak++; }
-        else ok = g.notes.some(n=>n.midi===m) ? true : false;
+      const need=g.notes.filter(n=>n.req && !n.hit);
+      if(g.start-t<=EARLY && need.length){
+        const n=need.find(n=>n.midi===m);
+        if(n){
+          ok=true;
+          // Chord lessons: count the chord only once all its keys are down together
+          if(together && need.length>1){ if(need.every(x=>held.has(x.midi))) need.forEach(score); }
+          else score(n);
+        } else ok = g.notes.some(n=>n.midi===m) ? true : false;
       } else ok=false;
     }
   } else if(playing && mode==='play'){
     let best=null, bd=WIN;
-    for(const n of notes){ if(n.start>t+WIN) break; if(n.midi===m && !n.hit && !n.missed){ const d=Math.abs(n.start-t); if(d<=bd){ bd=d; best=n; } } }
-    if(best){ best.hit=true; ok=true; stats.hit++; stats.streak++; } else ok=false;
+    for(const n of notes){ if(n.start>t+WIN) break; if(n.req && n.midi===m && !n.hit && !n.missed){ const d=Math.abs(n.start-t); if(d<=bd){ bd=d; best=n; } } }
+    if(best){ score(best); ok=true; } else ok=false;
   }
   if(ok===false){ stats.wrong++; stats.streak=0; }
   stats.bestStreak=Math.max(stats.bestStreak,stats.streak);
@@ -278,11 +482,13 @@ cv.addEventListener('pointerdown',e=>{ const r=cv.getBoundingClientRect(), m=key
 const release=e=>{ const m=pointers.get(e.pointerId); if(m!=null){ pointers.delete(e.pointerId); noteOff(m); } };
 cv.addEventListener('pointerup',release); cv.addEventListener('pointercancel',release);
 
-// Computer keyboard: A W S E D F T G Y H U J K = C4..C5, Space = start/pause
+// Computer keyboard: A W S E D F T G Y H U J K = C4..C5, Space = start/pause, Esc = close
 const KEYMAP='awsedftgyhujk';
 const downKeys=new Set();
+const overlayOpen=()=>!$('#learn').hidden || !$('#intro').hidden;
 addEventListener('keydown',e=>{
-  if(e.target.tagName==='SELECT') return;
+  if(e.key==='Escape'){ if(!$('#intro').hidden) $('#intro').hidden=true; else $('#learn').hidden=true; return; }
+  if(e.target.tagName==='SELECT' || overlayOpen()) return;
   if(e.code==='Space'){ e.preventDefault(); togglePlay(); return; }
   const i=KEYMAP.indexOf(e.key.toLowerCase()); if(i<0 || e.repeat || downKeys.has(e.key)) return;
   downKeys.add(e.key); noteOn(60+i,'key');
@@ -293,17 +499,17 @@ addEventListener('keyup',e=>{ const i=KEYMAP.indexOf(e.key.toLowerCase()); if(i<
 function step(dt){
   let nt=t+dt*speed;
   if(mode==='wait'){
-    while(gi<groups.length && groups[gi].notes.every(n=>n.hit)) gi++;
+    advanceGroups();
     const g=groups[gi];
     waiting = !!(g && nt>=g.start);
     if(waiting) nt=g.start;
   } else waiting=false;
   if(mode==='play'){
-    for(const n of notes){ if(n.start>nt) break; if(!n.hit && !n.missed && nt>n.start+WIN){ n.missed=true; stats.miss++; stats.streak=0; } }
+    for(const n of notes){ if(n.start>nt) break; if(n.req && !n.hit && !n.missed && nt>n.start+WIN){ n.missed=true; stats.miss++; stats.streak=0; } }
   }
   while(si<notes.length && notes[si].start<=nt){
     const n=notes[si++];
-    if(mode==='listen'){ n.hit=true; n.auto=true; tone(n.midi,n.dur/speed); }
+    if(!n.req){ n.hit=true; n.auto=true; tone(n.midi,n.dur/speed, mode==='listen'?0.6:0.45); }   // Listen mode, or the other hand
     else if(mode==='play' && soundOn) tone(n.midi,n.dur/speed,0.4);
   }
   t=nt;
@@ -316,17 +522,125 @@ function frame(ts){
   draw(); requestAnimationFrame(frame);
 }
 
+/* ---------- Results ---------- */
+function setResult(title,starsN,big,detail,buttons){
+  $('#resTitle').textContent=title;
+  $('#resStars').innerHTML = starsN==null ? '' : [1,2,3].map(i=>i<=starsN?'★':'<span class="off">★</span>').join('');
+  $('#resAcc').textContent=big; $('#resDetail').textContent=detail;
+  const box=$('#resBtns'); box.innerHTML='';
+  for(const b of buttons){ const el=document.createElement('button'); el.textContent=b.label; if(b.primary) el.className='primary'; el.onclick=b.fn; box.appendChild(el); }
+  $('#result').hidden=false;
+}
+const statLine=()=>`${stats.hit} hit · ${stats.miss} missed · ${stats.wrong} wrong · best streak ${stats.bestStreak}`;
 function finish(){
-  playing=false; finished=true; releaseWake();
-  const acc=accuracy(); let best=acc;
-  if(mode!=='listen'){
-    try{ const k='keys.best.'+song.title+'.'+mode; best=Math.max(acc, +(localStorage.getItem(k)||0)); localStorage.setItem(k,best); }catch(e){}
+  playing=false; finished=true; releaseWake(); updateUI();
+  const acc=accuracy();
+  if(lesson) return lessonFinish(acc);
+  if(mode==='listen') return setResult(song.title,null,'♪','Now try it yourself in “Wait for me”.',[{label:'Close',fn:closeResult}]);
+  let best=acc;
+  try{ const k='keys.best.'+song.title+'.'+mode; best=Math.max(acc, +(localStorage.getItem(k)||0)); localStorage.setItem(k,best); }catch(e){}
+  setResult(song.title,null,acc+'%',statLine()+` · personal best ${best}%`,[{label:'Again',primary:true,fn:()=>{restart();togglePlay();}},{label:'Close',fn:closeResult}]);
+}
+function closeResult(){ $('#result').hidden=true; }
+
+/* ---------- Lessons ---------- */
+const getBest=id=>{ try{ return +(localStorage.getItem('keys.lesson.'+id)||0); }catch(e){ return 0; } };
+const setBest=(id,v)=>{ try{ localStorage.setItem('keys.lesson.'+id, v); }catch(e){} };
+const starsFor=acc=> acc>=97?3 : acc>=90?2 : acc>=PASS?1 : 0;
+const starStr=n=>'★'.repeat(n)+'☆'.repeat(3-n);
+function nextLesson(L){ const i=ALL_LESSONS.indexOf(L); return ALL_LESSONS[i+1]||null; }
+
+function lessonFinish(acc){
+  const L=lesson;
+  if(mode==='listen') return setResult(L.title,null,'♪','Your turn! Now play it yourself.',[{label:'▶ Start lesson',primary:true,fn:()=>startLesson(L,false)},{label:'Lessons',fn:openLearn}]);
+  const counts = mode===L.mode && (hands==='both' || !L.both);
+  const prev=getBest(L.id), pass=acc>=PASS;
+  if(counts && acc>prev) setBest(L.id,acc);
+  let detail = statLine()+'.';
+  if(!pass) detail = `You need ${PASS}% to complete this lesson. Try a slower speed, or practise one hand at a time.`;
+  if(!counts) detail += hands!=='both' ? ' One-hand practice run: play with both hands to complete the lesson.' : ` Practice run: use “${L.mode==='play'?'Play along':'Wait for me'}” to complete the lesson.`;
+  const nx=nextLesson(L), btns=[];
+  if(pass && counts && nx) btns.push({label:'Next lesson ▶',primary:true,fn:()=>showIntro(nx)});
+  btns.push({label:'↺ Retry',primary:!(pass&&counts&&nx),fn:()=>startLesson(L,false)});
+  btns.push({label:'Lessons',fn:openLearn});
+  setResult(pass&&counts ? (acc>prev&&prev>0 ? '🎉 New best!' : '🎉 Lesson complete') : (pass?'Nice practice!':'Almost there'), starsFor(acc), acc+'%', detail, btns);
+}
+
+function openLearn(){
+  closeResult(); $('#intro').hidden=true;
+  if(playing) togglePlay();
+  const box=$('#courses'); box.innerHTML='';
+  for(const c of COURSES){
+    const done=c.lessons.filter(l=>getBest(l.id)>=PASS).length;
+    const next=c.lessons.find(l=>getBest(l.id)<PASS);
+    const el=document.createElement('section'); el.className='course';
+    el.innerHTML=`<h2>${c.icon} ${c.title}</h2><div class="sub">${c.sub} · ${done}/${c.lessons.length}</div><div class="bar"><i style="width:${100*done/c.lessons.length}%"></i></div>`;
+    c.lessons.forEach((l,i)=>{
+      const b=getBest(l.id), ok=b>=PASS, btn=document.createElement('button');
+      btn.className='lesson'+(ok?' done':'')+(l===next?' next':'');
+      btn.innerHTML=`<span class="num">${ok?'✓':i+1}</span><span class="t">${esc(l.title)}</span>${ok?`<span class="s">${starStr(starsFor(b))}</span>`:''}`;
+      btn.onclick=()=>showIntro(l);
+      el.appendChild(btn);
+    });
+    box.appendChild(el);
   }
-  $('#resTitle').textContent=song.title;
-  $('#resAcc').textContent = mode==='listen' ? '♪' : acc+'%';
-  $('#resDetail').textContent = mode==='listen' ? 'Now try it yourself in “Wait for me”.' :
-    `${stats.hit} hit · ${stats.miss} missed · ${stats.wrong} wrong · best streak ${stats.bestStreak} · personal best ${best}%`;
-  $('#result').hidden=false; updateUI();
+  $('#learn').hidden=false;
+}
+
+function miniKeyboard(L){
+  const split=L.split||60, info=new Map();
+  for(const n of L.notes){ const i=info.get(n.midi); if(!i) info.set(n.midi,{hand:n.midi<split?'L':'R',finger:n.finger}); else if(i.finger==null) i.finger=n.finger; }
+  const ms=[...info.keys()], a=Math.floor(Math.min(...ms)/12)*12, b=Math.ceil((Math.max(...ms)+1)/12)*12-1;
+  const wh=[]; for(let m=a;m<=b;m++) if(!isBlack(m)) wh.push(m);
+  const kw=24,kh=78,bw=14,bh=48, Wd=wh.length*kw;
+  const colr=m=>info.get(m).hand==='L'?C.left:C.accent;
+  let s=`<svg viewBox="0 0 ${Wd} ${kh}" width="${Wd}" height="${kh}" font-family="system-ui,sans-serif" text-anchor="middle">`;
+  wh.forEach((m,i)=>{
+    const used=info.has(m), x=i*kw;
+    s+=`<rect x="${x+.5}" y=".5" width="${kw-1}" height="${kh-1}" rx="3" fill="${used?colr(m):'#f3f4fa'}" stroke="#0f1220"/>`;
+    if(used){ const f=info.get(m).finger; if(f) s+=`<text x="${x+kw/2}" y="${kh-24}" font-size="13" font-weight="700" fill="#0b0e1a">${f}</text>`;
+      s+=`<text x="${x+kw/2}" y="${kh-8}" font-size="10" fill="#0b0e1a">${NAMES[m%12]}</text>`; }
+    else if(m%12===0) s+=`<text x="${x+kw/2}" y="${kh-8}" font-size="9" fill="#8b90b0">C${m/12-1}</text>`;
+  });
+  wh.forEach((m,i)=>{
+    if(!isBlack(m+1) || m+1>b) return;
+    const bm=m+1, used=info.has(bm), x=(i+1)*kw-bw/2;
+    s+=`<rect x="${x}" y="0" width="${bw}" height="${bh}" rx="2" fill="${used?colr(bm):'#1a1d2b'}"/>`;
+    if(used && info.get(bm).finger) s+=`<text x="${x+bw/2}" y="${bh-8}" font-size="11" font-weight="700" fill="#0b0e1a">${info.get(bm).finger}</text>`;
+  });
+  return s+'</svg>';
+}
+
+function showIntro(L){
+  closeResult(); $('#learn').hidden=true;
+  if(playing) togglePlay();
+  const c=L.course, card=$('#introCard');
+  card.innerHTML=`<div class="kicker">${c.icon} ${c.title} · Lesson ${L.idx+1} of ${c.lessons.length}</div>
+    <h2>${esc(L.title)}</h2>${L.text.map(p=>`<p>${p}</p>`).join('')}
+    <div class="mini">${miniKeyboard(L)}</div>
+    ${L.both?`<div class="seg" id="introHands"><button data-h="right">Right hand</button><button data-h="left">Left hand</button><button data-h="both">Both hands</button></div>`:''}
+    <div class="meta">${L.mode==='play'?'⏱ Play along: the music keeps going.':'⏸ Wait for me: the music waits for you.'} Numbers are finger numbers. Pass with ${PASS}%.${getBest(L.id)?` Your best: ${getBest(L.id)}%.`:''}</div>
+    <div class="btns"><button class="primary" id="introStart">▶ Start</button><button id="introListen">👂 Listen first</button><button id="introBack">Lessons</button></div>`;
+  const seg=$('#introHands');
+  if(seg){
+    const sync=()=>seg.querySelectorAll('button').forEach(b=>b.classList.toggle('on',b.dataset.h===hands));
+    seg.querySelectorAll('button').forEach(b=>b.onclick=()=>{ hands=b.dataset.h; $('#hands').value=hands; sync(); });
+    sync();
+  }
+  $('#introStart').onclick=()=>startLesson(L,false);
+  $('#introListen').onclick=()=>startLesson(L,true);
+  $('#introBack').onclick=openLearn;
+  $('#intro').hidden=false;
+}
+
+function startLesson(L,listen){
+  $('#intro').hidden=true; $('#learn').hidden=true; closeResult();
+  lesson=L;
+  if(!L.both && hands!=='both'){ hands='both'; $('#hands').value='both'; }
+  mode = listen ? 'listen' : L.mode; $('#mode').value=mode;
+  fillSongs(); songSel.value='lesson'; $('#tracks').hidden=true;
+  loadSong(L);
+  togglePlay();
 }
 
 /* ---------- Drawing ---------- */
@@ -342,34 +656,49 @@ function draw(){
   // falling notes
   const pps=kbTop/LOOK;
   cx.save(); cx.beginPath(); cx.rect(0,0,W,kbTop); cx.clip();
-  cx.textAlign='center'; cx.textBaseline='bottom'; cx.font='600 11px system-ui,sans-serif';
+  cx.textAlign='center'; cx.textBaseline='bottom';
   for(const n of notes){
     const yb=kbTop-(n.start-t)*pps; if(yb<0) break;
     const yt=yb-n.dur*pps; if(yt>kbTop) continue;
     const r=keyRect(n.midi); if(!r) continue;
-    let fill = n.midi<60 ? C.left : C.accent;
-    if(n.hit) fill=C.good; else if(n.missed) fill=C.bad;
-    cx.globalAlpha = n.missed ? 0.45 : 1;
+    const other = mode!=='listen' && !n.req;
+    let fill = other ? OTHER : (n.hand==='L' ? C.left : C.accent);
+    if(!other && n.hit) fill=C.good; else if(n.missed) fill=C.bad;
+    cx.globalAlpha = n.missed ? 0.45 : other ? 0.6 : 1;
     cx.fillStyle=fill; rrect(r.x+1.5,yt,r.w-3,Math.max(4,yb-yt),5);
-    if(labelsOn && r.w>=14 && yb-yt>16){ cx.fillStyle='rgba(10,12,22,.8)'; cx.fillText(NAMES[n.midi%12],r.x+r.w/2,yb-3); }
+    if(labelsOn && r.w>=14 && yb-yt>16){
+      cx.fillStyle='rgba(10,12,22,.8)';
+      cx.font='600 11px system-ui,sans-serif'; cx.fillText(NAMES[n.midi%12],r.x+r.w/2,yb-3);
+      if(n.finger && yb-yt>32){ cx.font='800 14px system-ui,sans-serif'; cx.fillText(n.finger,r.x+r.w/2,yb-17); }
+    }
   }
   cx.globalAlpha=1; cx.restore();
   // hit line
   cx.fillStyle = waiting ? C.accent : 'rgba(255,255,255,0.25)'; cx.fillRect(0,kbTop-2,W,2);
 
   // which keys should light up
-  const target=new Set(), sounding=new Set();
-  if(mode==='wait' && groups[gi] && groups[gi].start-t<=EARLY) groups[gi].notes.forEach(n=>{ if(!n.hit) target.add(n.midi); });
-  if(mode==='listen' && playing) for(let i=Math.max(0,si-64);i<si;i++){ const n=notes[i]; if(n.start<=t && n.start+n.dur>t) sounding.add(n.midi); }
+  const target=new Map(), sounding=new Map();
+  if(mode==='wait' && groups[gi] && groups[gi].start-t<=EARLY) groups[gi].notes.forEach(n=>{ if(n.req && !n.hit) target.set(n.midi,n); });
+  if(playing) for(let i=Math.max(0,si-64);i<si;i++){ const n=notes[i]; if(!n.req && n.start<=t && n.start+n.dur>t) sounding.set(n.midi,n); }
   const pulse = 0.55+0.45*Math.sin(performance.now()/180);
+  const handCol=n=>n.hand==='L'?C.left:C.accent;
 
   const paintKey=(m,r)=>{
     const h=held.get(m), isHeld=held.has(m);
+    const x=r.x+(r.black?0:1), w=r.w-(r.black?0:2), rad=r.black?3:5;
     let fill = r.black ? '#1a1d2b' : '#f3f4fa';
     if(isHeld) fill = h===true ? C.good : h===false ? C.bad : '#a9b0d8';
-    else if(sounding.has(m)) fill = m<60 ? C.left : C.accent;
-    cx.fillStyle=fill; rrect(r.x+(r.black?0:1), kbTop, r.w-(r.black?0:2), r.h, r.black?3:5);
-    if(!isHeld && target.has(m)){ cx.globalAlpha = waiting ? pulse : 0.35; cx.fillStyle = m<60 ? C.left : C.accent; rrect(r.x+(r.black?0:1),kbTop,r.w-(r.black?0:2),r.h,r.black?3:5); cx.globalAlpha=1; }
+    else if(sounding.has(m)) fill = mode==='listen' ? handCol(sounding.get(m)) : '#8a90b4';
+    cx.fillStyle=fill; rrect(x, kbTop, w, r.h, rad);
+    const tg=target.get(m);
+    if(!isHeld && tg){
+      cx.globalAlpha = waiting ? pulse : 0.35; cx.fillStyle=handCol(tg); rrect(x,kbTop,w,r.h,rad); cx.globalAlpha=1;
+      if(tg.finger && labelsOn){   // show which finger to use
+        const cxp=r.x+r.w/2, cyp=kbTop+r.h*(r.black?0.72:0.62), rr=Math.min(11,r.w/2-1);
+        cx.fillStyle='#0b0e1a'; cx.beginPath(); cx.arc(cxp,cyp,rr,0,Math.PI*2); cx.fill();
+        cx.fillStyle='#fff'; cx.font=`800 ${Math.round(rr*1.25)}px system-ui,sans-serif`; cx.textAlign='center'; cx.textBaseline='middle'; cx.fillText(tg.finger,cxp,cyp+1);
+      }
+    }
   };
   for(const m of whites) paintKey(m,keyRect(m));
   cx.textAlign='center'; cx.textBaseline='bottom'; cx.font='10px system-ui,sans-serif'; cx.fillStyle='#7a7f9e';
@@ -382,16 +711,18 @@ function draw(){
 
 /* ---------- UI ---------- */
 function updateHud(){
-  $('#hud').innerHTML = mode==='listen' ? `${esc(song?song.title:'')}<small>Listen mode</small>` :
-    `${accuracy()}% · streak ${stats.streak}<small>${esc(song?song.title:'')}</small>`;
+  const title = lesson ? `${lesson.course.icon} ${lesson.course.title} ${lesson.idx+1} · ${esc(lesson.title)}` : esc(song?song.title:'');
+  const tip = lesson && lesson.tip ? `<small class="tip">${esc(lesson.tip)}</small>` : '';
+  const handTxt = hands==='both' ? '' : ` · ${hands} hand only`;
+  $('#hud').innerHTML = mode==='listen' ? `${title}<small>Listening…</small>` :
+    `${accuracy()}% · streak ${stats.streak}<small>${title}${handTxt}</small>${tip}`;
 }
 function updateUI(){
-  $('#play').textContent = playing ? '❚❚ Pause' : (finished||t>-LEAD ? '▶ Resume' : '▶ Start');
-  if(finished) $('#play').textContent='▶ Start';
-  $('#msg').textContent = !playing && !finished && t<=-LEAD ? 'Press Start (or Space) — connect your piano with a USB OTG cable' : (!playing && !finished ? 'Paused' : '');
+  $('#play').textContent = playing ? '❚❚ Pause' : (finished||t<=-LEAD ? '▶ Start' : '▶ Resume');
+  $('#msg').textContent = !playing && !finished && t<=-LEAD ? (lesson?'Press Start when you\'re ready':'Press Start (or Space), or tap 🎓 Learn for lessons') : (!playing && !finished ? 'Paused' : '');
   updateHud();
 }
-const esc=s=>s.replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 
 let wake=null;
 async function holdWake(){ try{ if(navigator.wakeLock) wake=await navigator.wakeLock.request('screen'); }catch(e){} }
@@ -407,23 +738,27 @@ function togglePlay(){
 
 const songSel=$('#song');
 function fillSongs(){
-  songSel.innerHTML = BUILTIN.map((s,i)=>`<option value="b${i}">${esc(s.title)}</option>`).join('') +
+  songSel.innerHTML = (lesson ? `<option value="lesson">🎓 ${esc(lesson.title)}</option>` : '') +
+    BUILTIN.map((s,i)=>`<option value="b${i}">${esc(s.title)}</option>`).join('') +
     (midiFile ? `<option value="file">📄 ${esc(midiFile.title)}</option>` : '');
 }
 songSel.onchange=()=>{
-  const v=songSel.value;
+  const v=songSel.value; if(v==='lesson') return;
+  if(lesson){ lesson=null; fillSongs(); songSel.value=v; }
   $('#tracks').hidden = v!=='file';
   if(v==='file') loadFileSong(); else loadSong(BUILTIN[+v.slice(1)]);
 };
 $('#mode').onchange=e=>{ mode=e.target.value; restart(); };
+$('#hands').onchange=e=>{ hands=e.target.value; restart(); };
 $('#speed').onchange=e=>{ speed=parseFloat(e.target.value); };
 $('#play').onclick=togglePlay;
 $('#restart').onclick=()=>{ restart(); releaseWake(); };
-$('#again').onclick=()=>{ restart(); togglePlay(); };
-$('#close').onclick=()=>{ $('#result').hidden=true; };
 $('#sound').onclick=e=>{ soundOn=!soundOn; e.currentTarget.setAttribute('aria-pressed',soundOn); audio(); };
 $('#labels').onclick=e=>{ labelsOn=!labelsOn; e.currentTarget.setAttribute('aria-pressed',labelsOn); };
 $('#midi').onclick=connectMidi;
+$('#learnBtn').onclick=openLearn;
+$('#learnClose').onclick=()=>{ $('#learn').hidden=true; };
+$('#intro').onclick=e=>{ if(e.target.id==='intro') $('#intro').hidden=true; };
 $('#fs').onclick=async()=>{
   try{ if(!document.fullscreenElement){ await document.documentElement.requestFullscreen(); await screen.orientation.lock('landscape'); } else await document.exitFullscreen(); }catch(e){}
 };
@@ -433,6 +768,7 @@ $('#file').onchange=async e=>{
   try{
     const parsed=parseMidiFile(await f.arrayBuffer());
     if(!parsed.notes.length) throw new Error('No notes found in this file');
+    lesson=null;
     midiFile={title:f.name.replace(/\.midi?$/i,''), ...parsed, on:new Set(parsed.tracks.map(t=>t.index))};
     $('#tracks').innerHTML = 'Tracks: ' + parsed.tracks.map(t=>`<label><input type="checkbox" data-t="${t.index}" checked> ${esc(t.name)} (${t.count})</label>`).join('');
     $('#tracks').querySelectorAll('input').forEach(cb=>cb.onchange=()=>{ const i=+cb.dataset.t; cb.checked?midiFile.on.add(i):midiFile.on.delete(i); loadFileSong(); });
@@ -450,6 +786,10 @@ document.addEventListener('visibilitychange',()=>{ if(document.hidden && playing
 
 /* ---------- Boot ---------- */
 BUILTIN.forEach(s=>s.notes=parseNotation(s.src,s.bpm));
+for(const L of ALL_LESSONS){
+  L.mode=L.mode||'wait'; L.notes=parseNotation(L.src,L.bpm);
+  const split=L.split||60; L.both = L.notes.some(n=>n.midi<split) && L.notes.some(n=>n.midi>=split);
+}
 fillSongs(); loadSong(BUILTIN[0]);
 connectMidi();
 requestAnimationFrame(frame);
