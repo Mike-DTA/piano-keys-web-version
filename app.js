@@ -219,7 +219,7 @@ const OTHER='#4a5070';           // notes the app plays for the hand you're not 
 
 let song=null, notes=[], groups=[], gi=0, si=0, songEnd=0, songBeat=0.5, meter=4, lastBeat=null;
 let t=-LEAD, playing=false, finished=false, waiting=false, mode='wait', speed=1, hands='both';
-let soundOn=false, labelsOn=true, metroOn=false, metroPref=false, lastTs=0, together=false, previewPhase=false;
+let soundOn=false, labelScale=1, metroOn=false, metroPref=false, lastTs=0, together=false, previewPhase=false;
 let cur=null;         // what's loaded: {kind:'lesson'|'drill'|'free', def, title, sub, tip, lesson?, regen?, section?}
 let session=null;     // practice session in progress
 let trainer=null;     // speed trainer in progress
@@ -824,16 +824,21 @@ function draw(){
     cx.globalAlpha = n.missed ? 0.45 : other ? 0.6 : 1;
     cx.fillStyle=fill; rrect(r.x+1.5,yt,r.w-3,Math.max(4,yb-yt),5);
     cx.globalAlpha=1;
-    if(labelsOn && r.w>=14 && yb-yt>16){
+    if(labelScale && r.w>=14){   // note name at the bottom of the note, finger number above it, shrunk to fit narrow keys
+      const fit=(txt,size,weight)=>{ cx.font=`${weight} ${size}px system-ui,sans-serif`; const w=cx.measureText(txt).width; if(w>r.w-3){ size=Math.floor(size*(r.w-3)/w); cx.font=`${weight} ${size}px system-ui,sans-serif`; } return size; };
       cx.fillStyle='rgba(10,12,22,.8)';
-      cx.font='600 11px system-ui,sans-serif'; cx.fillText(NAMES[n.midi%12],r.x+r.w/2,yb-3);
-      if(n.finger && yb-yt>32){ cx.font='800 14px system-ui,sans-serif'; cx.fillText(n.finger,r.x+r.w/2,yb-17); }
+      const nm=NAMES[n.midi%12], s1=fit(nm,Math.round(11*labelScale),600);
+      if(yb-yt>s1+5){
+        cx.fillText(nm,r.x+r.w/2,yb-3);
+        if(n.finger){ const s2=fit(String(n.finger),Math.round(14*labelScale),800); if(yb-yt>s1+s2+9) cx.fillText(n.finger,r.x+r.w/2,yb-s1-6); }
+      }
     }
     if(n.label){   // chord name in a pill to the left of the chord (right if no room)
-      cx.font='700 13px system-ui,sans-serif'; const tw=cx.measureText(n.label).width+12, py=Math.min(yb,kbTop)-22;
+      const ls=Math.max(1,labelScale), ph=Math.round(20*ls);
+      cx.font=`700 ${Math.round(13*ls)}px system-ui,sans-serif`; const tw=cx.measureText(n.label).width+12*ls, py=Math.min(yb,kbTop)-ph-2;
       const px = r.x-tw-6>=0 ? r.x-tw-6 : r.x+r.w+6;
-      cx.fillStyle='rgba(23,27,46,.9)'; rrect(px,py,tw,20,10);
-      cx.fillStyle=C.text; cx.textAlign='left'; cx.textBaseline='middle'; cx.fillText(n.label,px+6,py+10.5);
+      cx.fillStyle='rgba(23,27,46,.9)'; rrect(px,py,tw,ph,ph/2);
+      cx.fillStyle=C.text; cx.textAlign='left'; cx.textBaseline='middle'; cx.fillText(n.label,px+6*ls,py+ph/2+.5);
       cx.textAlign='center'; cx.textBaseline='bottom';
     }
   }
@@ -856,15 +861,15 @@ function draw(){
     const tg=target.get(m);
     if(!isHeld && tg){
       cx.globalAlpha = waiting ? pulse : 0.35; cx.fillStyle=handCol(tg); rrect(x,kbTop,w,r.h,rad); cx.globalAlpha=1;
-      if(tg.finger && labelsOn){
-        const cxp=r.x+r.w/2, cyp=kbTop+r.h*(r.black?0.72:0.62), rr=Math.min(11,r.w/2-1);
+      if(tg.finger && labelScale){
+        const cxp=r.x+r.w/2, cyp=kbTop+r.h*(r.black?0.72:0.62), rr=Math.min(11*labelScale,r.w/2-1);
         cx.fillStyle='#0b0e1a'; cx.beginPath(); cx.arc(cxp,cyp,rr,0,Math.PI*2); cx.fill();
         cx.fillStyle='#fff'; cx.font=`800 ${Math.round(rr*1.25)}px system-ui,sans-serif`; cx.textAlign='center'; cx.textBaseline='middle'; cx.fillText(tg.finger,cxp,cyp+1);
       }
     }
   };
   for(const m of whites) paintKey(m,keyRect(m));
-  cx.textAlign='center'; cx.textBaseline='bottom'; cx.font='10px system-ui,sans-serif'; cx.fillStyle='#7a7f9e';
+  cx.textAlign='center'; cx.textBaseline='bottom'; cx.font=`${Math.round(10*Math.max(1,labelScale*.8))}px system-ui,sans-serif`; cx.fillStyle='#7a7f9e';
   for(const m of whites) if(m%12===0 && ww>=16){ const r=keyRect(m); cx.fillText('C'+(m/12-1), r.x+r.w/2, H-4); }
   for(let m=lo;m<=hi;m++) if(isBlack(m)){ const r=keyRect(m); if(r) paintKey(m,r); }
 
@@ -911,7 +916,10 @@ $('#play').onclick=togglePlay;
 $('#restart').onclick=()=>{ restart(); releaseWake(); };
 $('#metro').onclick=e=>{ metroOn=!metroOn; if(!(song&&song.metro)) metroPref=metroOn; e.currentTarget.setAttribute('aria-pressed',metroOn); audio(); };
 $('#sound').onclick=e=>{ soundOn=!soundOn; e.currentTarget.setAttribute('aria-pressed',soundOn); audio(); };
-$('#labels').onclick=e=>{ labelsOn=!labelsOn; e.currentTarget.setAttribute('aria-pressed',labelsOn); };
+const LABEL_SIZES=[[0,'Aa off'],[1,'Aa S'],[1.4,'Aa M'],[1.8,'Aa L'],[2.4,'Aa XL']];
+$('#labels').innerHTML=LABEL_SIZES.map(([v,l])=>`<option value="${v}">${l}</option>`).join('');
+function applyLabels(){ labelScale=prog.settings.labels!=null?prog.settings.labels:1; $('#labels').value=String(labelScale); }   // saved per player
+$('#labels').onchange=e=>{ prog.settings.labels=labelScale=+e.target.value; saveProg(); };
 $('#midi').onclick=connectMidi;
 $('#homeBtn').onclick=()=>{ if(session) sessionSummary(); else openScreen('home'); };
 $('#resCard').onclick=()=>clearCountdown();
@@ -1118,7 +1126,7 @@ async function loadMySongs(){
 }
 const saveMySong=r=>dbDo(true,st=>st.put(r)).catch(()=>toast('⚠ Could not save on this device'));
 const deleteMySong=id=>dbDo(true,st=>st.delete(id));
-const songCats=()=>Object.assign(mySongs&&mySongs.length?{mine:'📁 My songs'}:{}, SONG_CATS);
+const songCats=()=>Object.assign(mySongs&&mySongs.length?{mine:'📁 My songs'}:{}, self.SONG_CATS);
 function myEntries(){
   return (mySongs||[]).map(r=>myMap.get(r.id) || myMap.set(r.id,{id:'my:'+r.id, title:r.title, by:r.by||r.file, cat:'mine', level:0, mine:r}).get(r.id));
 }
@@ -1133,22 +1141,42 @@ function handsFor(r){   // which hand plays each note of an imported song
 }
 const meterOf=(ts,q)=> !ts ? {meter:4, beat:q} : ts.d===8 && ts.n%3===0 ? {meter:ts.n/3, beat:q*1.5} : {meter:ts.n, beat:q*4/ts.d};
 
+const hashBytes=u8=>{ let h=0x811c9dc5; for(let i=0;i<u8.length;i++){ h^=u8[i]; h=Math.imul(h,16777619); } return (h>>>0).toString(16)+'-'+u8.length; };
+let afterWho=null;   // something to show once a player has been picked
 async function importFiles(files){
-  await loadMySongs(); const added=[];
+  await loadMySongs(); const added=[]; let dups=0;
   for(const f of files){
     try{
-      const buf=await f.arrayBuffer(), b=new Uint8Array(buf,0,4), sig=String.fromCharCode(...b);
+      const buf=await f.arrayBuffer(), b=new Uint8Array(buf,0,4), sig=String.fromCharCode(...b), hash=hashBytes(new Uint8Array(buf));
+      const dup=mySongs.find(r=>r.hash===hash); if(dup){ added.push(dup); dups++; continue; }   // same file again: open the copy we have
       const p = sig==='MThd' ? parseMidiFile(buf) : parseMusicXML(sig==='PK\x03\x04' ? await unzipMusicXML(buf) : new TextDecoder().decode(buf));
       if(!p.notes.length) throw new Error('no notes found');
-      const r={id:Date.now().toString(36)+Math.random().toString(36).slice(2,6), title:p.title||f.name.replace(/\.[^.]+$/,''), by:p.by||'', file:f.name, added:Date.now(),
+      const r={id:Date.now().toString(36)+Math.random().toString(36).slice(2,6), title:p.title||f.name.replace(/\.[^.]+$/,''), by:p.by||'', file:f.name, added:Date.now(), hash,
                tracks:p.tracks, on:p.tracks.map(t=>t.index), notes:p.notes, ...meterOf(p.ts,p.beat)};
       await dbDo(true,st=>st.put(r)); mySongs.push(r); added.push(r);
     }catch(err){ alert(`Could not add ${f.name}: ${err.message}`); }
   }
   if(!added.length) return;
-  toast(`📁 Added ${added.length} song${added.length>1?'s':''} to My songs`);
-  songQ=''; songLvl=0; songCat='mine'; openScreen('songs');
-  if(added.length===1) showSong(songById('my:'+added[0].id));
+  const n=added.length-dups;
+  toast(n ? `📁 Added ${n} song${n>1?'s':''} to My songs` : '📁 Already in My songs');
+  const show=async()=>{ songQ=''; songLvl=0; songCat='mine'; openScreen('songs'); if(added.length===1){ await loadLibrary().catch(()=>{}); showSong(songById('my:'+added[0].id)); } };
+  if(!$('#who').hidden) afterWho=show; else show();
+}
+/* Songs sent by link, e.g. from a MIDI converter:
+     Keys/#midi=<the .mid file in base64 or base64url>&title=Song name
+     Keys/#midi=https://example.com/song.mid   (the host must allow cross-origin downloads)
+   Data after # never leaves the browser, so no server is needed. ?midi=… works too, for short values. */
+async function importFromLink(){
+  const h=new URLSearchParams(location.hash.slice(1)), q=new URLSearchParams(location.search), v=h.get('midi')||q.get('midi');
+  if(!v) return;
+  const title=(h.get('title')||q.get('title')||'Linked song').trim();
+  history.replaceState(null,'',location.pathname);   // so a reload doesn't import it again
+  try{
+    let bytes;
+    if(/^https?:\/\//i.test(v)){ const r=await fetch(v); if(!r.ok) throw new Error('download failed ('+r.status+')'); bytes=await r.arrayBuffer(); }
+    else{ const b=atob(v.replace(/ /g,'+').replace(/-/g,'+').replace(/_/g,'/')); bytes=Uint8Array.from(b,c=>c.charCodeAt(0)); }
+    await importFiles([new File([bytes], title.replace(/[\\/:*?"<>|]+/g,'_')+'.mid')]);
+  }catch(err){ alert('Could not open the linked song: '+(err.message||err)); }
 }
 
 /* MusicXML (partwise): staves give the hands, <fingering> the finger numbers. Repeats are played as written once. */
@@ -1313,7 +1341,7 @@ $('#importFile').onchange=async e=>{
     const p=JSON.parse(await f.text()); if(!p || p.v!==1 || typeof p.xp!=='number') throw new Error('not a Keys backup');
     if(!confirm(`Replace ${me().name}'s progress with this backup (level ${levelInfo(p.xp).L}, ${Object.keys(p.lessons||{}).length} lessons)?`)) return;
     const b=blankProg(); prog=Object.assign(b,p,{counts:Object.assign(b.counts,p.counts), settings:Object.assign(b.settings,p.settings)});
-    saveProg(); toast('⬆ Backup restored'); if(screenName) openScreen(screenName);
+    saveProg(); applyLabels(); toast('⬆ Backup restored'); if(screenName) openScreen(screenName);
   }catch(err){ alert('Could not import: '+err.message); }
 };
 
@@ -1393,10 +1421,11 @@ function switchProfile(id){
   if(id!==profiles.active){
     flushTime(); saveProg();
     profiles.active=id; saveProfiles(); prog=loadProg();
-    freeKeyboard(); setHands('both'); setSpeed(1); updateWhoBtn();
+    freeKeyboard(); setHands('both'); setSpeed(1); updateWhoBtn(); applyLabels();
     toast(`${me().emoji} Hi, ${me().name}!`);
   }
-  closeWho(); openScreen('home');
+  closeWho();
+  if(afterWho){ const f=afterWho; afterWho=null; f(); } else openScreen('home');
 }
 function editPlayer(p){
   const isNew=!p; let emoji=p?p.emoji:AVATARS.find(a=>!profiles.list.some(x=>x.emoji===a))||AVATARS[0];
@@ -1417,7 +1446,7 @@ function editPlayer(p){
     if(!confirm(`Delete ${p.name} and all of their progress? This cannot be undone.`)) return;
     try{ localStorage.removeItem(progKey(p.id)); }catch(e){}
     profiles.list=profiles.list.filter(x=>x!==p);
-    if(profiles.active===p.id){ profiles.active=profiles.list[0].id; prog=loadProg(); freeKeyboard(); }
+    if(profiles.active===p.id){ profiles.active=profiles.list[0].id; prog=loadProg(); freeKeyboard(); applyLabels(); }
     saveProfiles(); renderWho(); updateWhoBtn();
   };
 }
@@ -1431,7 +1460,8 @@ freeKeyboard();
 connectMidi();
 requestAnimationFrame(frame);
 openScreen('home');
-updateWhoBtn();
+updateWhoBtn(); applyLabels();
 if(profiles.list.length>1) openWho(true);
+importFromLink(); addEventListener('hashchange',importFromLink);   // also when Keys is already open in that tab
 setTimeout(()=>loadLibrary().catch(()=>{}), 2000);   // fetch the song list in the background
 if('serviceWorker' in navigator && location.protocol==='https:') navigator.serviceWorker.register('sw.js').catch(()=>{});

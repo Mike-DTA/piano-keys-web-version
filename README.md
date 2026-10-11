@@ -59,7 +59,7 @@ Connect the piano with a USB-OTG cable and allow MIDI access.
   per-skill accuracy, 26 achievements, recent activity, daily goal setting.
   **Export/Import backup** moves the current player's progress between devices (stored in the browser otherwise).
 - **Keyboard view:** hands (practise one hand while the app plays the other), speed, 🥁 metronome
-  (accent on beat 1, count-in), sound, note names/fingers, fullscreen.
+  (accent on beat 1, count-in), sound, note names/fingers with adjustable size (Aa off/S/M/L/XL, saved per player), fullscreen.
 
 ## Notation (content.js)
 Tokens separated by spaces; a token is notes joined with `+`, then optional `:beats` to advance (default 1). `R` = rest.
@@ -84,6 +84,28 @@ set `hands:'tracks'` when the file has one track per staff (as Mutopia files do)
 The metronome clicks quarter notes; for other beat units set `pulse` in quarters, e.g. `meter:2, pulse:1.5` for 6/8.
 Only add files you are allowed to share: the composition being old is not enough, since a MIDI sequence can have its
 own copyright (Mutopia Project files marked Public Domain are safe).
+
+## Sending songs to Keys by link
+Another web app (e.g. a MIDI converter) can hand a song to Keys with a link. Keys imports it into **My songs**
+and opens it (after *Who's playing?* if that's showing). Opening the same file again opens the existing copy.
+
+```
+https://mike-dta.github.io/piano-keys-web-version/#midi=<the .mid file, base64 or base64url>&title=Song%20name
+https://mike-dta.github.io/piano-keys-web-version/#midi=https%3A%2F%2Fexample.com%2Fsong.mid&title=Song%20name
+```
+Use `#`, not `?`, for file data: the part after `#` is never sent to a server, so links can be long (whole songs)
+and nothing is hosted. A file URL only works if its host allows cross-origin downloads (GitHub Pages and
+raw.githubusercontent.com do). MusicXML works the same way.
+
+From JavaScript, with the MIDI file as a `Uint8Array`:
+```js
+function openInKeys(bytes, title){
+  let bin=''; for(let i=0;i<bytes.length;i++) bin+=String.fromCharCode(bytes[i]);
+  const data=btoa(bin).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');   // base64url
+  window.open('https://mike-dta.github.io/piano-keys-web-version/#midi='+data+'&title='+encodeURIComponent(title), 'keys');
+}
+```
+Passing the name `'keys'` reuses the same Keys tab for every song.
 
 ## Adding lessons
 Add an entry to a course in `COURSES` (content.js) and its id to `PATH`:
