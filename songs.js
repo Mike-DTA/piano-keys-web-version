@@ -37,6 +37,8 @@ const CANON = {
   v3: 'D4 F#4 A4 G4 | F#4 D4 F#4 E4 | D4 B3 D4 A4 | G4 B4 A4 G4',
   bass: 'D3:2 A2:2 | B2:2 F#2:2 | G2:2 D2:2 | G2:2 A2:2',
 };
+const CANCAN = 'G4:4 A4 C5 B4 A4 | D5:2 D5:2 D5 E5 B4 C5 | A4:2 A4:2 A4 C5 B4 A4';   // three bars of the theme; four different endings
+const CANCAN_LH = 'G2:2 D3:2 D3:2 A2:2 | G2:2 D3:2 G2:2 D3:2 | D3:2 A2:2 D3:2 A2:2';
 const MOON_1 = 'G#3 C#4 E4 G#3 C#4 E4 G#3 C#4 E4 G#3 C#4 E4';
 
 self.SONGS = [
@@ -155,6 +157,51 @@ self.SONGS = [
 {id:'mozart-40', title:'Symphony No. 40 (theme)', by:'W. A. Mozart, 1788', cat:'classical', level:3, bpm:112,
  rh:'Eb5:.5 D5:.5 | D5 Eb5:.5 D5:.5 D5 Eb5:.5 D5:.5 | D5 Bb5 R Bb5:.5 A5:.5 | G5 G5:.5 F5:.5 Eb5 Eb5:.5 D5:.5 | C5 C5 R D5:.5 C5:.5 | C5 D5:.5 C5:.5 C5 D5:.5 C5:.5 | C5 A5 R A5:.5 G5:.5 | F#5 F#5:.5 Eb5:.5 D5 D5:.5 C5:.5 | Bb4 Bb4 R',
  lh:'R:1 | G2:4 | G2:4 | C3:4 | D3:4 | D3:4 | D3:4 | D3:4 | G2:3'},
+
+/* Checked against public-domain sources: Mutopia scores (Mozart #900, Handel #459; Strauss #519 read for the
+   notes only) and John Chambers' ABC transcriptions (Offenbach, Elgar) and Frank Nordberg's (Vivaldi).
+   Arranged for piano: melody on the right, bass line on the left, trills and tremolos simplified. */
+{id:'eine-kleine-nachtmusik', title:'Eine kleine Nachtmusik (opening)', by:'W. A. Mozart, 1787', cat:'classical', level:3, bpm:120,
+ rh:'G5 R:.5 D5:.5 G5 R:.5 D5:.5 | G5:.5 D5:.5 G5:.5 B5:.5 D6:2 | C6 R:.5 A5:.5 C6 R:.5 A5:.5 | C6:.5 A5:.5 F#5:.5 A5:.5 D5:2 | '+
+    'G5 G5:1.5 B5:.5 A5:.5 G5:.5 | G5:.5 F#5:.5 F#5:1.5 A5:.5 C6:.5 F#5:.5 | A5:.5 G5:.5 G5:1.5 B5:.5 A5:.5 G5:.5 | G5:.5 F#5:.5 F#5:1.5 A5:.5 C6:.5 F#5:.5 | '+
+    'G5:.5 G5:.5 F#5:.5 E5:.25 F#5:.25 G5:.5 G5:.5 A5:.5 G5:.25 A5:.25 | B5:.5 B5:.5 C6:.5 B5:.25 C6:.25 D6 R | '+
+    'D5:2 E5:2 | C5 C5 B4 B4 | A4 A4 G4:.5 F#4:.5 E4:.5 F#4:.5 | G4 A4 B4 R | D5:2 E5:2 | D5:.5 C5:.5 C5:.5 C5:.5 C5:.5 B4:.5 B4:.5 B4:.5 | B4:.5 A4:.5 A4:.5 A4:.5 G4:.5 F#4:.5 E4:.5 F#4:.5 | G4:3 A4:.5 F#4:.5 | G4:4',
+ lh:'G3 R:.5 D3:.5 G3 R:.5 D3:.5 | G3:.5 D3:.5 G3:.5 B3:.5 D4:2 | C4 R:.5 A3:.5 C4 R:.5 A3:.5 | C4:.5 A3:.5 F#3:.5 A3:.5 D3:2 | '+
+    'G2 D3 G2 D3 | G2 D3 G2 D3 | G2 D3 G2 D3 | G2 D3 G2 D3 | G2 A2 B2 F#2 | G2 A2 B2 R | '+
+    'G2:2 C3:2 | D3:2 E3:2 | C3:2 D3:2 | B2 D3 G2:2 | G2:2 C3:2 | D3:2 E3:2 | C3:2 D3:2 | G2:3 D3 | G2+G3:4'},
+{id:'can-can', title:'Can-Can (Infernal Galop)', by:'Jacques Offenbach, 1858', cat:'classical', level:2, bpm:240, meter:4, pulse:2,
+ rh:[CANCAN, 'G4 G5 F#5 E5 D5 C5 B4 A4', CANCAN, 'G4 D5 A4 B4 G4:2 D4:2', CANCAN, 'G4 G5 F#5 E5 D5 C5 B4 A4', CANCAN, 'G4 D5 A4 B4 G4:4'].join(' | '),
+ lh:[CANCAN_LH, 'G2:2 D3:2 D3:2 A2:2', CANCAN_LH, 'G2:2 D3:2 G2:2 D3:2', CANCAN_LH, 'G2:2 D3:2 D3:2 A2:2', CANCAN_LH, 'G2:2 D3:2 G2:4'].join(' | ')},
+{id:'land-of-hope', title:'Pomp and Circumstance No. 1 (Land of Hope and Glory)', by:'Edward Elgar, 1901', cat:'classical', level:2, bpm:144, meter:4, pulse:2,
+ rh:'G4:4 F#4 G4 A4:2 | E4:4 D4:4 | C4:4 B3 C4 D4:2 | A3:8 | B3:4 C#4 D4:2 E4 | A4:4 D4:4 | G4:4 G4 F#4:2 E4 | D4:8 | '+
+    'G5:4 F#5 G5 A5:2 | E5:4 D5:4 | C5:4 B4 C5 D5:2 | A4:8 | B4:4 C#5 D5:2 E5 | A5:4 D5:4 | C6:4 C6 B5:2 A5 | B5:8 | '+
+    'E5:4 F#5 G5:2 A5 | D5:4 G5:4 | G5:8 | C6:2 B5:4 A5:2 | G5:8',
+ lh:'G2:4 D3:4 | D3:8 | C3:4 B2:4 | A2:8 | D3:4 C#3:4 | D3:8 | E3:8 | D3:8 | '+
+    'G2:4 D3:4 | D3:8 | C3:4 B2:4 | A2:8 | D3:4 C#3:4 | D3:8 | E3:4 D3:4 | D3:4 B2:4 | '+
+    'C3:8 | B2:4 E3:4 | A2:8 | D3:8 | G2+D3:8'},
+{id:'vivaldi-spring', title:'Spring (The Four Seasons)', by:'Antonio Vivaldi, 1725', cat:'classical', level:3, bpm:200, meter:4, pulse:2,
+ rh:'E4 | G#4 G#4 G#4 F#4:.5 E4:.5 B4:3 B4:.5 A4:.5 | G#4 G#4 G#4 F#4:.5 E4:.5 B4:3 B4:.5 A4:.5 | G#4 A4:.5 B4:.5 A4 G#4 F#4 D#4 B3 E4 | '+
+    'G#4 G#4 G#4 F#4:.5 E4:.5 B4:3 B4:.5 A4:.5 | G#4 G#4 G#4 F#4:.5 E4:.5 B4:3 B4:.5 A4:.5 | G#4 A4:.5 B4:.5 A4 G#4 F#4:2 R E4 | '+
+    'B4 A4:.5 G#4:.5 A4 B4 C#5 B4:2 E4 | B4 A4:.5 G#4:.5 A4 B4 C#5 B4:2 E4 | C#5 B4:2 A4 G#4 F#4:.5 E4:.5 F#4:2 | E4:7',
+ lh:'R | E3:8 | E3:8 | E3:4 B2:4 | E3:8 | E3:8 | E3:4 B2:4 | E3:8 | E3:8 | A2:4 B2:4 | E2+E3:7'},
+{id:'blue-danube', title:'The Blue Danube (main theme)', by:'Johann Strauss II, 1866', cat:'classical', level:2, bpm:144, meter:3,
+ rh:'C4 | C4 E4 G4 | G4:2 E5+G5 | E5+G5:2 C5+E5 | C5+E5:2 C4 | C4 E4 G4 | G4:2 F5+G5 | F5+G5:2 B4+F5 | B4+F5:2 B3 | '+
+    'B3 D4 A4 | A4:2 F5+A5 | F5+A5:2 B4+F5 | B4+F5:2 B3 | B3 D4 A4 | A4:2 E5+A5 | E5+A5:2 C5+E5 | C5+E5:2 C4 | '+
+    'C4 E4 G4 | C5:2 G5+C6 | G5+C6:2 E5+G5 | E5+G5:2 C4 | C4 E4 G4 | C5:2 A5+C6 | A5+C6:2 F5+A5 | F5+A5:2 D4 | '+
+    'D4 F4 A4 | A4~4:3 | R F#4 G4 | E5~4:3 | R C5 E4 | E4:2 D4 | A4:2 G4 | C4:1.5 C5:.5 C5 | C5:2',
+ lh:'R | R:3 | C3 E3+G3 E3+G3 | C3 E3+G3 E3+G3 | C3 E3+G3 E3+G3 | C3 E3+G3 E3+G3 | D3 F3+G3 F3+G3 | D3 F3+G3 F3+G3 | D3 F3+G3 F3+G3 | '+
+    'D3 F3+G3 F3+G3 | D3 F3+G3 F3+G3 | D3 F3+G3 F3+G3 | D3 F3+G3 F3+G3 | D3 F3+G3 F3+G3 | C3 E3+G3 E3+G3 | C3 E3+G3 E3+G3 | C3 E3+G3 E3+G3 | '+
+    'C3 E3+G3 E3+G3 | E3 G3+C4 G3+C4 | E3 G3+C4 G3+C4 | E3 G3+C4 G3+C4 | E3 G3+C4 G3+C4 | F3 A3+D4 A3+D4 | F3 A3+D4 A3+D4 | F3+A3+D4:3 | '+
+    'A3 F3 D3 | D3 F3+G3 F3+G3 | B2 F3+G3 F3+G3 | C3 E3+G3 E3+G3 | E3 G3+C4 G3+C4 | F3+A3+C4:3 | D3+G3+B3:3 | C3+E3+G3:2 C3+E3+G3 | C3+E3+G3:2'},
+{id:'hallelujah', title:'Hallelujah Chorus (Messiah)', by:'G. F. Handel, 1741', cat:'classical', level:3, bpm:84,
+ rh:'D5:1.5 A5:.5 B5:.5 A5:.5 R | D6:1.5 F#5:.5 G5:.5 F#5:.5 R:.5 A5:.5 | G5:.5 F#5:.5 E5 D5:.5 A4:.5 B4:.5 C#5:.5 | '+
+    'D5:1.5 A4:.5 B4:.5 A4:.5 R | D5:1.5 A4:.5 B4:.5 A4:.5 R:.5 D5:.25 D5:.25 | D5:.5 D5:.5 R:.5 D5:.25 D5:.25 D5:.5 D5:.5 R:.5 D5:.5 | C#5:.5 D5 C#5:.5 D5 R | '+
+    'E5:1.5 A4:.5 F#5:.5 E5:.5 R | E5:1.5 A4:.5 F#5:.5 E5:.5 R:.5 E5:.25 E5:.25 | F#5:.5 E5:.5 R:.5 E5:.25 E5:.25 F#5:.5 E5:.5 R:.5 E5:.5 | F#5:.5 E5:.5 D5 C#5 R | '+
+    'A4:2 B4 C#5 | D5:.5 D4:.5 D5:1.5 D5:.5 C#5 | B4:2 A4 R | F#4+A4+D5:4',
+ lh:'D3:1.5 F#3:.5 G3:.5 D3:.5 R | D3:1.5 F#3:.5 G3:.5 D3:.5 R | E3:.5 D3:.5 A3:.5 A2:.5 D3 R | '+
+    'D3:1.5 F#3:.5 G3:.5 D3:.5 R | D3:1.5 F#3:.5 G3:.5 D3:.5 R:.5 F#3:.25 F#3:.25 | G3:.5 D3:.5 R:.5 F#3:.25 F#3:.25 G3:.5 D3:.5 R:.5 F#3:.5 | E3:.5 D3:.5 A3:.5 A2:.5 D3 R | '+
+    'A2:1.5 C#3:.5 D3:.5 A2:.5 R | A2:1.5 C#3:.5 D3:.5 A2:.5 R:.5 C#3:.25 C#3:.25 | D3:.5 A2:.5 R:.5 C#3:.25 C#3:.25 D3:.5 A2:.5 R:.5 C#3:.5 | D3:.5 C#3:.5 B2 A2 R | '+
+    'A2:2 B2 C#3 | D3:.5 D2:.5 D3:1.5 D3:.5 C#3 | B2:2 A2 R | D2+D3:4'},
 /* ---- Piano repertoire from the Mutopia Project (mutopiaproject.org), MIDI files licensed Public Domain ----
  hands:'tracks' — each file has one track per staff, so hands follow the score rather than a split point */
 {id:'bach-minuet-a-minor', title:'Minuet in A minor (BWV Anh. 120)', by:'J. S. Bach, 1725', cat:'classical', level:1, meter:3, hands:'tracks', mid:'midi/bach-minuet-a-minor.mid'},   // Mutopia #1612, Public Domain
