@@ -105,21 +105,31 @@ ALL_LESSONS.forEach(prep);
 /* =====================================================================
    Progress store
    ===================================================================== */
-const PKEY='keys.progress.v1';
+const PKEY='keys.progress.v1', IKEY='keys.profiles.v1';
+/* Players: everyone has their own progress. The first player keeps the original key, so existing progress carries over. */
+const progKey=id=>id==='p1' ? PKEY : PKEY+'.'+id;
+function loadProfiles(){
+  try{ const x=JSON.parse(localStorage.getItem(IKEY)); if(x && x.list && x.list.length) return x; }catch(e){}
+  return {active:'p1', list:[{id:'p1', name:'Player 1', emoji:'🎹'}]};
+}
+let profiles=loadProfiles();
+if(!profiles.list.some(p=>p.id===profiles.active)) profiles.active=profiles.list[0].id;
+const me=()=>profiles.list.find(p=>p.id===profiles.active);
+function saveProfiles(){ try{ localStorage.setItem(IKEY, JSON.stringify(profiles)); }catch(e){} }
 function blankProg(){ return {v:1, xp:0, lessons:{}, songs:{}, days:{}, skills:{}, ach:{}, counts:{drills:0,ear:0,sessions:0,runs:0,trainer:0,bestCombo:0}, history:[], bestDays:0, settings:{goal:10, sessionMin:10, drillMode:'wait'}, created:Date.now()}; }
-function loadProg(){
-  try{ const p=JSON.parse(localStorage.getItem(PKEY)); if(p && p.v){ const b=blankProg(); return Object.assign(b,p,{counts:Object.assign(b.counts,p.counts), settings:Object.assign(b.settings,p.settings)}); } }catch(e){}
+function loadProg(id=profiles.active){
+  try{ const p=JSON.parse(localStorage.getItem(progKey(id))); if(p && p.v){ const b=blankProg(); return Object.assign(b,p,{counts:Object.assign(b.counts,p.counts), settings:Object.assign(b.settings,p.settings)}); } }catch(e){}
   const p=blankProg();
-  try{ for(const l of ALL_LESSONS){ const old=+(localStorage.getItem('keys.lesson.'+l.id)||0); if(old) p.lessons[l.id]={best:old, reps:0, plays:1, last:Date.now()}; } }catch(e){}   // migrate v2
+  if(id==='p1') try{ for(const l of ALL_LESSONS){ const old=+(localStorage.getItem('keys.lesson.'+l.id)||0); if(old) p.lessons[l.id]={best:old, reps:0, plays:1, last:Date.now()}; } }catch(e){}   // migrate v2
   return p;
 }
 let prog = loadProg();
-function saveProg(){ try{ localStorage.setItem(PKEY, JSON.stringify(prog)); }catch(e){} }
+function saveProg(){ try{ localStorage.setItem(progKey(profiles.active), JSON.stringify(prog)); }catch(e){} }
 
 const dkey=(d=new Date())=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
 const day=(k=dkey())=>prog.days[k]||(prog.days[k]={sec:0,xp:0,runs:0});
-const dayOK=k=>prog.days[k] && prog.days[k].sec>=60;
-function streak(){ const d=new Date(); if(!dayOK(dkey(d))) d.setDate(d.getDate()-1); let n=0; while(dayOK(dkey(d))){ n++; d.setDate(d.getDate()-1); } return n; }
+const dayOK=(k,p=prog)=>p.days[k] && p.days[k].sec>=60;
+function streak(p=prog){ const d=new Date(); if(!dayOK(dkey(d),p)) d.setDate(d.getDate()-1); let n=0; while(dayOK(dkey(d),p)){ n++; d.setDate(d.getDate()-1); } return n; }
 const totalSec=()=>Object.values(prog.days).reduce((s,d)=>s+d.sec,0);
 const lvlNeed=L=>50*L*(L-1);
 function levelInfo(xp){ let L=1; while(xp>=lvlNeed(L+1)) L++; return {L, cur:xp-lvlNeed(L), need:lvlNeed(L+1)-lvlNeed(L), title:TITLES[Math.min(TITLES.length-1,Math.floor((L-1)/2))]}; }
@@ -350,9 +360,9 @@ cv.addEventListener('pointerup',release); cv.addEventListener('pointercancel',re
 // Computer keyboard: A W S E D F T G Y H U J K = C4..C5, Space = start/pause, Esc = close
 const KEYMAP='awsedftgyhujk';
 const downKeys=new Set();
-const overlayOpen=()=>!$('#screen').hidden || !$('#intro').hidden;
+const overlayOpen=()=>!$('#screen').hidden || !$('#intro').hidden || !$('#who').hidden;
 addEventListener('keydown',e=>{
-  if(e.key==='Escape'){ if(!$('#intro').hidden) $('#intro').hidden=true; else if(!$('#screen').hidden) closeScreen(); return; }
+  if(e.key==='Escape'){ if(!$('#who').hidden){ if(!whoForced) closeWho(); } else if(!$('#intro').hidden) $('#intro').hidden=true; else if(!$('#screen').hidden) closeScreen(); return; }
   if(e.target.tagName==='SELECT' || e.target.tagName==='INPUT' || overlayOpen()) return;
   if(e.code==='Space'){ e.preventDefault(); togglePlay(); return; }
   const i=KEYMAP.indexOf(e.key.toLowerCase()); if(i<0 || e.repeat || downKeys.has(e.key)) return;
@@ -483,7 +493,7 @@ function freeFinish(acc,res){
   let detail=statLine();
   if(res && res.songBest!=null) detail+=` · personal best ${res.songBest}%`;
   else if(cur && cur.song) detail+=' · one-hand practice (play both hands to set a best score)';
-  else{ let bestS=acc; try{ const k='keys.best.'+song.title+'.'+mode; bestS=Math.max(acc, +(localStorage.getItem(k)||0)); localStorage.setItem(k,bestS); }catch(e){} detail+=` · personal best ${bestS}%`; }
+  else{ let bestS=acc; try{ const k='keys.best.'+(profiles.active==='p1'?'':profiles.active+'.')+song.title+'.'+mode; bestS=Math.max(acc, +(localStorage.getItem(k)||0)); localStorage.setItem(k,bestS); }catch(e){} detail+=` · personal best ${bestS}%`; }
   const title = res && res.songBest!=null && res.prevBest && acc>res.prevBest ? '🎉 New best · '+song.title : song.title;
   setResult(title, cur&&cur.song?starsFor(acc):null, acc+'%', detail, [{label:'Again',primary:true,fn:()=>{restart();togglePlay();}},{label:'⚡ Speed trainer',fn:()=>startTrainer(cur)},back], {xp:res&&res.xp});
 }
@@ -897,7 +907,11 @@ function loadFileSong(){
   closeScreen(); loadSong(def);
 }
 addEventListener('resize',layout);
-document.addEventListener('visibilitychange',()=>{ if(document.hidden){ if(playing) togglePlay(); flushTime(); } });
+let hiddenAt=0;
+document.addEventListener('visibilitychange',()=>{
+  if(document.hidden){ if(playing) togglePlay(); flushTime(); hiddenAt=Date.now(); }
+  else if(profiles.list.length>1 && hiddenAt && Date.now()-hiddenAt>20*60e3) openWho(true);   // shared device: ask again after a break
+});
 
 /* =====================================================================
    Screens: Home, Lessons, Practice, Progress
@@ -909,8 +923,8 @@ function openScreen(name){
   trainer=null; if(session){ flushTime(); session=null; }
   screenName=name;
   const tabs=[['home','🏠 Home'],['learn','🎓 Lessons'],['songs','🎵 Songs'],['practice','🏋 Practice'],['progress','📈 Progress']];
-  $('#snav').innerHTML=tabs.map(([k,l])=>`<button data-s="${k}" class="${k===name?'on':''}">${l}</button>`).join('')+'<span class="sp"></span><button class="kb" data-s="close">🎹 Keyboard</button>';
-  $('#snav').querySelectorAll('button').forEach(b=>b.onclick=()=>b.dataset.s==='close'?closeScreen():openScreen(b.dataset.s));
+  $('#snav').innerHTML=tabs.map(([k,l])=>`<button data-s="${k}" class="${k===name?'on':''}">${l}</button>`).join('')+`<span class="sp"></span><button class="kb who" data-s="who" title="Switch player">${me().emoji} ${esc(me().name)}</button><button class="kb" data-s="close">🎹 Keyboard</button>`;
+  $('#snav').querySelectorAll('button').forEach(b=>b.onclick=()=>b.dataset.s==='close'?closeScreen():b.dataset.s==='who'?openWho():openScreen(b.dataset.s));
   ({home:renderHome, learn:renderLearn, songs:renderSongs, practice:renderPractice, progress:renderProgress})[name]();
   $('#screen').hidden=false; $('#screen').scrollTop=0;
 }
@@ -923,7 +937,7 @@ function goalRing(size=64){
 }
 function heroHTML(){
   const li=levelInfo(prog.xp);
-  return `<div class="hero"><div class="lv"><b>Level ${li.L}</b> · ${li.title}<div class="xpbar"><i style="width:${100*li.cur/li.need}%"></i></div><small class="muted">${li.cur} / ${li.need} XP to level ${li.L+1}</small></div>
+  return `<div class="hero"><span class="avatar">${me().emoji}</span><div class="lv"><b>${esc(me().name)}</b> · Level ${li.L} · ${li.title}<div class="xpbar"><i style="width:${100*li.cur/li.need}%"></i></div><small class="muted">${li.cur} / ${li.need} XP to level ${li.L+1}</small></div>
     <div class="pill"><b>🔥 ${streak()}</b><small>day streak</small></div><div class="pill"><b>${nPassed()}</b><small>of ${ALL_LESSONS.length} lessons</small></div>${goalRing()}</div>`;
 }
 
@@ -1127,25 +1141,26 @@ function renderProgress(){
     <div class="box"><h3>Recent activity</h3><ul class="hist">${hist}</ul></div>
     <div class="box"><h3>Settings & backup</h3>
       <p>Daily goal</p><div class="chips" id="goal">${[5,10,15,20,30,45,60].map(m=>`<button data-m="${m}" class="${m===goal?'on':''}">${m} min</button>`).join('')}</div>
-      <p>Progress is saved on this device. Export a backup to move it to another phone or browser.</p>
-      <div class="btns" style="justify-content:flex-start"><button id="exp">⬇ Export backup</button><button id="imp">⬆ Import backup</button><button id="reset">Reset progress</button></div></div>
+      <p>Progress for <b>${me().emoji} ${esc(me().name)}</b> is saved on this device. Export a backup to move it to another phone or browser.</p>
+      <div class="btns" style="justify-content:flex-start"><button id="exp">⬇ Export backup</button><button id="imp">⬆ Import backup</button><button id="reset">Reset progress</button><button id="players">👥 Players</button></div></div>
   </div>`;
   bind('#goal button',el=>{ prog.settings.goal=+el.dataset.m; saveProg(); renderProgress(); });
   bind('#exp',exportProg);
   bind('#imp',()=>$('#importFile').click());
-  bind('#reset',()=>{ if(confirm('Delete all progress on this device? This cannot be undone (export a backup first if unsure).')){ prog=blankProg(); saveProg(); renderProgress(); toast('Progress reset'); } });
+  bind('#players',()=>openWho());
+  bind('#reset',()=>{ if(confirm(`Delete all of ${me().name}'s progress? This cannot be undone (export a backup first if unsure).`)){ prog=blankProg(); saveProg(); renderProgress(); toast('Progress reset'); } });
 }
 function exportProg(){
   flushTime();
   const blob=new Blob([JSON.stringify(prog)],{type:'application/json'}), a=document.createElement('a');
-  a.href=URL.createObjectURL(blob); a.download=`keys-progress-${dkey()}.json`; document.body.appendChild(a); a.click(); a.remove();
+  a.href=URL.createObjectURL(blob); a.download=`keys-${me().name.replace(/[^\w-]+/g,'_')}-${dkey()}.json`; document.body.appendChild(a); a.click(); a.remove();
   setTimeout(()=>URL.revokeObjectURL(a.href),2000); toast('⬇ Backup downloaded');
 }
 $('#importFile').onchange=async e=>{
   const f=e.target.files[0]; e.target.value=''; if(!f) return;
   try{
     const p=JSON.parse(await f.text()); if(!p || p.v!==1 || typeof p.xp!=='number') throw new Error('not a Keys backup');
-    if(!confirm(`Replace progress on this device with this backup (level ${levelInfo(p.xp).L}, ${Object.keys(p.lessons||{}).length} lessons)?`)) return;
+    if(!confirm(`Replace ${me().name}'s progress with this backup (level ${levelInfo(p.xp).L}, ${Object.keys(p.lessons||{}).length} lessons)?`)) return;
     const b=blankProg(); prog=Object.assign(b,p,{counts:Object.assign(b.counts,p.counts), settings:Object.assign(b.settings,p.settings)});
     saveProg(); toast('⬆ Backup restored'); if(screenName) openScreen(screenName);
   }catch(err){ alert('Could not import: '+err.message); }
@@ -1199,6 +1214,65 @@ function showIntro(L, it){
   $('#intro').hidden=false;
 }
 
+
+/* ---------- Players ("Who's playing?") ---------- */
+const AVATARS=['🎹','🦊','🐼','🐸','🦁','🐯','🐨','🐙','🦄','🐝','🐢','🐬','🦉','🐱','🐶','🐰','🚀','⭐','🌈','🎸'];
+let whoForced=false;   // shown at start-up: a player has to be picked
+const W_=$('#whoCard');
+function openWho(forced=false){
+  closeResult(); $('#intro').hidden=true;
+  if(playing) togglePlay();
+  trainer=null; if(session){ flushTime(); session=null; }
+  whoForced=forced; renderWho(); $('#who').hidden=false;
+}
+function closeWho(){ $('#who').hidden=true; whoForced=false; }
+function renderWho(){
+  const tile=p=>{ const g=p.id===profiles.active?prog:loadProg(p.id), li=levelInfo(g.xp), m=Math.floor(((g.days[dkey()]||{}).sec||0)/60);
+    return `<div class="ptile${p.id===profiles.active?' on':''}"><button class="pick" data-id="${p.id}"><span class="avatar">${p.emoji}</span><b>${esc(p.name)}</b>
+      <small>Level ${li.L} · 🔥 ${streak(g)} · today ${m}/${g.settings.goal} min</small></button><button class="edit" data-id="${p.id}" title="Edit ${esc(p.name)}">✎</button></div>`; };
+  W_.innerHTML=`<h2>Who's playing?</h2>
+    <div class="ptiles">${profiles.list.map(tile).join('')}<div class="ptile"><button class="pick add" id="addP"><span class="avatar">＋</span><b>Add player</b><small>Their own lessons, songs and streak</small></button></div></div>
+    ${whoForced?'':'<div class="btns"><button id="whoClose">Close</button></div>'}`;
+  W_.querySelectorAll('.pick[data-id]').forEach(b=>b.onclick=()=>switchProfile(b.dataset.id));
+  W_.querySelectorAll('.edit').forEach(b=>b.onclick=()=>editPlayer(profiles.list.find(p=>p.id===b.dataset.id)));
+  $('#addP').onclick=()=>editPlayer(null);
+  if(!whoForced) $('#whoClose').onclick=closeWho;
+}
+function switchProfile(id){
+  if(id!==profiles.active){
+    flushTime(); saveProg();
+    profiles.active=id; saveProfiles(); prog=loadProg();
+    freeKeyboard(); setHands('both'); setSpeed(1); updateWhoBtn();
+    toast(`${me().emoji} Hi, ${me().name}!`);
+  }
+  closeWho(); openScreen('home');
+}
+function editPlayer(p){
+  const isNew=!p; let emoji=p?p.emoji:AVATARS.find(a=>!profiles.list.some(x=>x.emoji===a))||AVATARS[0];
+  W_.innerHTML=`<h2>${isNew?'Add player':'Edit player'}</h2>
+    <input id="pName" class="search" maxlength="20" placeholder="Name" value="${p?esc(p.name):''}" autocomplete="off">
+    <div class="avatars">${AVATARS.map(a=>`<button data-a="${a}" class="${a===emoji?'on':''}">${a}</button>`).join('')}</div>
+    <div class="btns"><button class="primary" id="pSave">${isNew?'Add':'Save'}</button><button id="pCancel">Cancel</button>${!isNew&&profiles.list.length>1?'<button id="pDel" class="danger">Delete player</button>':''}</div>`;
+  W_.querySelectorAll('.avatars button').forEach(b=>b.onclick=()=>{ emoji=b.dataset.a; W_.querySelectorAll('.avatars button').forEach(x=>x.classList.toggle('on',x===b)); });
+  const name=$('#pName'); name.focus();
+  const save=()=>{
+    const n=name.value.trim(); if(!n){ name.focus(); return; }
+    if(isNew){ const id='p'+Date.now().toString(36); profiles.list.push({id, name:n, emoji}); saveProfiles(); switchProfile(id); return; }
+    Object.assign(p,{name:n, emoji}); saveProfiles(); renderWho(); if(screenName) openScreen(screenName); updateWhoBtn();
+  };
+  $('#pSave').onclick=save; name.onkeydown=e=>{ if(e.key==='Enter') save(); };
+  $('#pCancel').onclick=renderWho;
+  if($('#pDel')) $('#pDel').onclick=()=>{
+    if(!confirm(`Delete ${p.name} and all of their progress? This cannot be undone.`)) return;
+    try{ localStorage.removeItem(progKey(p.id)); }catch(e){}
+    profiles.list=profiles.list.filter(x=>x!==p);
+    if(profiles.active===p.id){ profiles.active=profiles.list[0].id; prog=loadProg(); freeKeyboard(); }
+    saveProfiles(); renderWho(); updateWhoBtn();
+  };
+}
+function updateWhoBtn(){ const b=$('#whoBtn'); b.textContent=me().emoji; b.title=`${me().name} (switch player)`; }
+$('#whoBtn').onclick=()=>openWho();
+
 /* =====================================================================
    Boot
    ===================================================================== */
@@ -1206,5 +1280,7 @@ freeKeyboard();
 connectMidi();
 requestAnimationFrame(frame);
 openScreen('home');
+updateWhoBtn();
+if(profiles.list.length>1) openWho(true);
 setTimeout(()=>loadLibrary().catch(()=>{}), 2000);   // fetch the song list in the background
 if('serviceWorker' in navigator && location.protocol==='https:') navigator.serviceWorker.register('sw.js').catch(()=>{});

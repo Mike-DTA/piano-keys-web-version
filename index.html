@@ -155,6 +155,25 @@ h2.sec{font-size:13px;text-transform:uppercase;letter-spacing:.07em;color:var(--
 .seg button.on{background:var(--panel2);color:var(--accent);font-weight:600}
 .intro .btns{justify-content:flex-start}
 
+/* Players */
+#who{position:fixed;z-index:12;background:rgba(10,12,22,.92)}
+.whocard{max-width:640px;width:100%}
+.whocard h2{margin:0 0 14px}
+.ptiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px;margin-bottom:12px}
+.ptile{position:relative}
+.ptile .pick{width:100%;height:100%;display:flex;flex-direction:column;align-items:center;gap:4px;padding:16px 10px 12px;white-space:normal;border-radius:14px}
+.ptile.on .pick{border-color:var(--accent)}
+.ptile .pick b{font-size:16px}
+.ptile .pick small{color:var(--muted);font-size:12px}
+.ptile .add{border-style:dashed;opacity:.85}
+.ptile .edit{position:absolute;top:6px;right:6px;padding:3px 8px;font-size:13px;background:transparent;border-color:transparent}
+.avatar{font-size:36px;line-height:1.1}
+.hero .avatar{font-size:40px}
+.avatars{display:flex;flex-wrap:wrap;gap:6px;justify-content:center;margin:4px 0 14px}
+.avatars button{font-size:24px;padding:4px 8px}
+.avatars button.on{border-color:var(--accent);background:var(--panel)}
+.danger{color:var(--bad);border-color:var(--bad)}
+
 /* Toasts */
 #toasts{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);z-index:20;display:flex;flex-direction:column;gap:6px;align-items:center;pointer-events:none;width:max-content;max-width:calc(100vw - 32px)}
 .toast{background:var(--panel2);border:1px solid var(--accent);color:var(--text);padding:8px 14px;border-radius:10px;box-shadow:0 6px 20px rgba(0,0,0,.4);font-weight:600;animation:tin .25s ease-out}
@@ -166,6 +185,7 @@ h2.sec{font-size:13px;text-transform:uppercase;letter-spacing:.07em;color:var(--
   <header>
     <div class="row">
       <button id="homeBtn" class="homebtn">🏠 Menu</button>
+      <button id="whoBtn"></button>
       <button id="songsBtn">🎵 Songs</button>
       <select id="mode" aria-label="Mode">
         <option value="wait">Wait for me</option>
@@ -208,6 +228,7 @@ h2.sec{font-size:13px;text-transform:uppercase;letter-spacing:.07em;color:var(--
 
 <div id="screen" hidden><nav class="snav" id="snav"></nav><div id="sbody"></div></div>
 <div id="intro" class="overlay" hidden><div class="card intro" id="introCard"></div></div>
+<div id="who" class="overlay" hidden><div class="card whocard" id="whoCard"></div></div>
 <div id="toasts"></div>
 <input type="file" id="importFile" accept=".json,application/json" hidden>
 <input type="file" id="file" accept=".mid,.midi,audio/midi,audio/x-midi" hidden>

@@ -28,6 +28,10 @@ Then open `http://localhost:3000` in Chrome on the phone. Debug via `chrome://in
 Connect the piano with a USB-OTG cable and allow MIDI access.
 
 ## What's in the app
+- **👥 Players:** several people can share one device (e.g. a tablet by the piano). Each player has their own
+  lessons, song scores, XP, streak, daily goal and settings. With more than one player the app opens on
+  *Who's playing?* (and asks again after 20 minutes away); switch any time from the name button in the menu
+  or the avatar in the keyboard bar. Add, rename (with an avatar) or delete players there.
 - **🏠 Home:** level & XP, day streak, daily-goal ring, *Today's practice*, continue learning, review.
 - **🎓 Lessons:** 48 lessons in 6 courses: Basics, Rhythm, Chords, Scales & keys, Two hands, Songs.
   Pass with 80% (★ 80, ★★ 90, ★★★ 97). Chord lessons require all chord keys held together.
@@ -44,7 +48,7 @@ Connect the piano with a USB-OTG cable and allow MIDI access.
   - *Speed trainer*: play-along starting slow; each run ≥ 90% speeds up until your goal speed.
 - **📈 Progress:** XP/levels, streaks, practice minutes (14-day chart), per-course stars,
   per-skill accuracy, 26 achievements, recent activity, daily goal setting.
-  **Export/Import backup** moves progress between devices (stored in the browser otherwise).
+  **Export/Import backup** moves the current player's progress between devices (stored in the browser otherwise).
 - **Keyboard view:** hands (practise one hand while the app plays the other), speed, 🥁 metronome
   (accent on beat 1, count-in), sound, note names/fingers, fullscreen, open `.mid` files.
 
