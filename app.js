@@ -1,7 +1,7 @@
 'use strict';
 /* =====================================================================
    Keys — app: engine, progress, drills, sessions, screens
-   Needs content.js (SKILLS, BUILTIN, COURSES, PATH, CH) loaded first.
+   Needs content.js (SKILLS, COURSES, PATH, CH) loaded first; songs.js is loaded on demand.
    ===================================================================== */
 
 /* ---------- Config ---------- */
@@ -26,6 +26,7 @@ function nameToMidi(s){
 function parseNotation(src,bpm){
   const spb = 60/bpm, out=[]; let beat=0;
   for(let tok of src.trim().split(/\s+/)){
+    if(tok==='|') continue;   // bar line
     let label=null; const lm=/^\[([^\]]+)\]/.exec(tok);
     if(lm){ label=lm[1]; tok=tok.slice(lm[0].length); }
     const ci = tok.lastIndexOf(':');
@@ -42,10 +43,12 @@ function parseNotation(src,bpm){
   }
   return out;
 }
+const voice=(src,bpm,hand)=>src ? parseNotation(src,bpm).map(n=>Object.assign(n,{hand})) : [];
 function prep(d){
-  if(!d.notes) d.notes=parseNotation(d.src,d.bpm);
+  if(!d.notes) d.notes = d.rh ? [...voice(d.rh,d.bpm,'R'), ...voice(d.lh,d.bpm,'L')] : parseNotation(d.src,d.bpm);
   d.mode=d.mode||'wait'; d.skills=d.skills||[];
-  const sp=d.split||60; d.both = d.notes.some(n=>n.midi<sp) && d.notes.some(n=>n.midi>=sp);
+  const sp=d.split||60, hd=n=>n.hand||(n.midi<sp?'L':'R');
+  d.both = d.notes.some(n=>hd(n)==='L') && d.notes.some(n=>hd(n)==='R');
   return d;
 }
 
@@ -98,13 +101,12 @@ function parseMidiFile(buf){
 const ALL_LESSONS = COURSES.flatMap(c=>c.lessons.map((l,i)=>Object.assign(l,{course:c, idx:i})));
 const LESSON = Object.fromEntries(ALL_LESSONS.map(l=>[l.id,l]));
 ALL_LESSONS.forEach(prep);
-BUILTIN.forEach(prep);
 
 /* =====================================================================
    Progress store
    ===================================================================== */
 const PKEY='keys.progress.v1';
-function blankProg(){ return {v:1, xp:0, lessons:{}, days:{}, skills:{}, ach:{}, counts:{drills:0,ear:0,sessions:0,runs:0,trainer:0,bestCombo:0}, history:[], bestDays:0, settings:{goal:10, sessionMin:10, drillMode:'wait'}, created:Date.now()}; }
+function blankProg(){ return {v:1, xp:0, lessons:{}, songs:{}, days:{}, skills:{}, ach:{}, counts:{drills:0,ear:0,sessions:0,runs:0,trainer:0,bestCombo:0}, history:[], bestDays:0, settings:{goal:10, sessionMin:10, drillMode:'wait'}, created:Date.now()}; }
 function loadProg(){
   try{ const p=JSON.parse(localStorage.getItem(PKEY)); if(p && p.v){ const b=blankProg(); return Object.assign(b,p,{counts:Object.assign(b.counts,p.counts), settings:Object.assign(b.settings,p.settings)}); } }catch(e){}
   const p=blankProg();
@@ -126,6 +128,7 @@ const starStr=n=>'★'.repeat(n)+'☆'.repeat(3-n);
 const best=id=>(prog.lessons[id]&&prog.lessons[id].best)||0;
 const passed=id=>best(id)>=PASS;
 const nPassed=()=>ALL_LESSONS.filter(l=>passed(l.id)).length;
+const nSongs=()=>Object.values(prog.songs).filter(r=>r.best>=PASS).length;
 function dueness(id){ const r=prog.lessons[id]; if(!r||r.best<PASS) return 0; return (Date.now()-r.last)/(INTERVALS[r.reps||0]*864e5); }
 const dueLessons=()=>ALL_LESSONS.filter(l=>dueness(l.id)>=1).sort((a,b)=>dueness(b.id)-dueness(a.id));
 const nextInPath=(match=()=>true)=>PATH.map(id=>LESSON[id]).find(l=>!passed(l.id)&&match(l));
@@ -180,6 +183,8 @@ const ACH = [
   {id:'sess10', i:'🏋', n:'Regular', d:'Finish 10 practice sessions', t:()=>prog.counts.sessions>=10},
   {id:'drill25', i:'🎯', n:'Drill sergeant', d:'Complete 25 drills', t:()=>prog.counts.drills>=25},
   {id:'ear10', i:'👂', n:'Golden ears', d:'Pass 10 play-by-ear drills', t:()=>prog.counts.ear>=10},
+  {id:'songs5', i:'🎵', n:'Repertoire', d:`Play 5 library songs at ${PASS}% or better`, t:()=>nSongs()>=5},
+  {id:'songs20', i:'🎼', n:'Songbook', d:`Play 20 library songs at ${PASS}% or better`, t:()=>nSongs()>=20},
   {id:'speed', i:'🚀', n:'Up to speed', d:'Reach your goal speed in the speed trainer', t:()=>prog.counts.trainer>=1},
   {id:'lv5', i:'🎖', n:'Level 5', d:'Reach level 5', t:()=>levelInfo(prog.xp).L>=5},
   {id:'lv10', i:'🏅', n:'Level 10', d:'Reach level 10', t:()=>levelInfo(prog.xp).L>=10},
@@ -220,11 +225,11 @@ const wants=n=> mode!=='listen' && (hands==='both' || (hands==='right')===(n.han
 function loadSong(s){
   song=s; together=!!s.together;
   const split=s.split||60;
-  notes = s.notes.map(n=>({...n, hand:n.midi<split?'L':'R'})).sort((a,b)=>a.start-b.start||a.midi-b.midi);
+  notes = s.notes.map(n=>({...n, hand:n.hand||(n.midi<split?'L':'R')})).sort((a,b)=>a.start-b.start||a.midi-b.midi);
   groups=[];
   for(const n of notes){ let g=groups[groups.length-1]; if(!(g && n.start-g.start<0.06)){ g={start:n.start, notes:[]}; groups.push(g); } g.notes.push(n); n.g=g; }
   songEnd = notes.reduce((m,n)=>Math.max(m,n.start+n.dur),0);
-  songBeat = s.beat || (s.bpm ? 60/s.bpm : 0.5); meter = s.meter||4;
+  songBeat = s.beat || (s.bpm ? 60/s.bpm*(s.pulse||1) : 0.5); meter = s.meter||4;
   metroOn = s.metro ? true : metroPref; $('#metro').setAttribute('aria-pressed',metroOn);
   const mids = notes.map(n=>n.midi);
   let a = mids.length? Math.min(...mids):60, b = mids.length? Math.max(...mids):72;
@@ -403,7 +408,7 @@ function startItem(it, listen=false){
   if(!d.both && hands!=='both') setHands('both');
   previewPhase = !listen && !!d.preview;
   mode = (listen||previewPhase) ? 'listen' : d.mode; $('#mode').value=mode;
-  fillSongs(); songSel.value='cur'; $('#tracks').hidden=true;
+  $('#tracks').hidden=true;
   loadSong(d);
   togglePlay();
 }
@@ -415,6 +420,10 @@ function recordRun(acc){
   const d=cur.def, res={acc, counts:isCounting()};
   prog.counts.runs++; prog.counts.bestCombo=Math.max(prog.counts.bestCombo||0, stats.bestStreak);
   if(cur.lesson && res.counts) Object.assign(res, updateLesson(cur.lesson.id, acc));
+  if(cur.song && (hands==='both' || !d.both)){   // library song, played with every hand it needs
+    const r=prog.songs[cur.song.id]||(prog.songs[cur.song.id]={best:0, plays:0});
+    res.prevBest=r.best; r.best=Math.max(r.best,acc); r.plays++; r.last=Date.now(); res.songBest=r.best;
+  }
   if(cur.kind==='drill'){ prog.counts.drills++; if(d.ear && acc>=PASS) prog.counts.ear++; }
   if(hands==='both') for(const s of d.skills||[]) updSkill(s, acc);
   res.xp = runXP(acc,res); addXP(res.xp);
@@ -466,10 +475,17 @@ function closeResult(){ clearCountdown(); $('#result').hidden=true; }
 const statLine=()=>`${stats.hit} hit · ${stats.miss} missed · ${stats.wrong} wrong · best streak ${stats.bestStreak}`;
 
 function freeFinish(acc,res){
-  if(mode==='listen') return setResult(song.title,null,'♪','Now try it yourself in “Wait for me”.',[{label:'Close',fn:closeResult}]);
-  let bestS=acc;
-  try{ const k='keys.best.'+song.title+'.'+mode; bestS=Math.max(acc, +(localStorage.getItem(k)||0)); localStorage.setItem(k,bestS); }catch(e){}
-  setResult(song.title,null,acc+'%',statLine()+` · personal best ${bestS}%`,[{label:'Again',primary:true,fn:()=>{restart();togglePlay();}},{label:'⚡ Speed trainer',fn:()=>startTrainer(cur)},{label:'Close',fn:closeResult}],{xp:res&&res.xp});
+  const back = cur&&cur.song ? {label:'🎵 Songs',fn:()=>openScreen('songs')} : {label:'Close',fn:closeResult};
+  if(mode==='listen'){
+    const play = cur&&cur.song ? [{label:'▶ Play it',primary:true,fn:()=>startItem(cur)}] : [];
+    return setResult(song.title,null,'♪','Now try it yourself.',[...play, back]);
+  }
+  let detail=statLine();
+  if(res && res.songBest!=null) detail+=` · personal best ${res.songBest}%`;
+  else if(cur && cur.song) detail+=' · one-hand practice (play both hands to set a best score)';
+  else{ let bestS=acc; try{ const k='keys.best.'+song.title+'.'+mode; bestS=Math.max(acc, +(localStorage.getItem(k)||0)); localStorage.setItem(k,bestS); }catch(e){} detail+=` · personal best ${bestS}%`; }
+  const title = res && res.songBest!=null && res.prevBest && acc>res.prevBest ? '🎉 New best · '+song.title : song.title;
+  setResult(title, cur&&cur.song?starsFor(acc):null, acc+'%', detail, [{label:'Again',primary:true,fn:()=>{restart();togglePlay();}},{label:'⚡ Speed trainer',fn:()=>startTrainer(cur)},back], {xp:res&&res.xp});
 }
 function lessonFinish(acc,res){
   const L=cur.lesson, pass=acc>=PASS, counts=res&&res.counts;
@@ -829,7 +845,7 @@ function updateHud(){
 }
 function updateUI(){
   $('#play').textContent = playing ? '❚❚ Pause' : (finished||t<=-LEAD ? '▶ Start' : '▶ Resume');
-  $('#msg').textContent = !playing && !finished && t<=-LEAD ? (cur&&cur.kind!=='free'?'Press Start when you\'re ready':'Press Start (or Space), or open 🏠 Menu for lessons and practice') : (!playing && !finished ? 'Paused' : '');
+  $('#msg').textContent = !notes.length ? 'Play freely, or pick something from 🎵 Songs' : !playing && !finished && t<=-LEAD ? 'Press Start (or Space) when you\'re ready' : (!playing && !finished ? 'Paused' : '');
   updateHud();
 }
 let wake=null;
@@ -837,25 +853,15 @@ async function holdWake(){ try{ if(navigator.wakeLock) wake=await navigator.wake
 function releaseWake(){ try{ wake&&wake.release(); }catch(e){} wake=null; }
 function togglePlay(){
   audio();
+  if(!notes.length){ openScreen('songs'); return; }   // free keyboard: nothing to play yet
   if(finished) restart();
   playing=!playing; lastTs=0;
   if(playing) holdWake(); else { releaseWake(); flushTime(); }
   updateUI();
 }
 
-const songSel=$('#song');
-function fillSongs(){
-  const showCur = cur && cur.kind!=='free' && cur.kind!=='file';
-  songSel.innerHTML = (showCur ? `<option value="cur">${cur.kind==='lesson'?'🎓':'🏋'} ${esc(cur.title)}</option>` : '') +
-    BUILTIN.map((s,i)=>`<option value="b${i}">${esc(s.title)}</option>`).join('') +
-    (midiFile ? `<option value="file">📄 ${esc(midiFile.title)}</option>` : '');
-}
-function loadFree(i){ cur={kind:'free', def:BUILTIN[i], title:BUILTIN[i].title}; session=null; trainer=null; if(mode==='listen'){ mode='wait'; $('#mode').value='wait'; } fillSongs(); songSel.value='b'+i; $('#tracks').hidden=true; loadSong(BUILTIN[i]); }
-songSel.onchange=()=>{
-  const v=songSel.value; if(v==='cur') return;
-  session=null; trainer=null;
-  if(v==='file') loadFileSong(); else loadFree(+v.slice(1));
-};
+function freeKeyboard(){ cur=null; session=null; trainer=null; $('#tracks').hidden=true; loadSong(prep({title:'Free play', notes:[]})); }
+$('#songsBtn').onclick=()=>openScreen('songs');
 $('#mode').onchange=e=>{ mode=e.target.value; previewPhase=false; restart(); };
 $('#hands').onchange=e=>{ hands=e.target.value; restart(); };
 $('#speed').innerHTML=SPEEDS.map(s=>`<option value="${s}"${s===1?' selected':''}>${Math.round(s*100)}%</option>`).join('');
@@ -887,8 +893,8 @@ $('#file').onchange=async e=>{
 };
 function loadFileSong(){
   const def={title:midiFile.title, notes:midiFile.notes.filter(x=>midiFile.on.has(x.track)), beat:midiFile.beat};
-  cur={kind:'file', def, title:def.title}; fillSongs(); songSel.value='file'; $('#tracks').hidden=false;
-  loadSong(def);
+  cur={kind:'file', def, title:def.title}; $('#tracks').hidden=false;
+  closeScreen(); loadSong(def);
 }
 addEventListener('resize',layout);
 document.addEventListener('visibilitychange',()=>{ if(document.hidden){ if(playing) togglePlay(); flushTime(); } });
@@ -902,10 +908,10 @@ function openScreen(name){
   if(playing) togglePlay();
   trainer=null; if(session){ flushTime(); session=null; }
   screenName=name;
-  const tabs=[['home','🏠 Home'],['learn','🎓 Lessons'],['practice','🏋 Practice'],['progress','📈 Progress']];
+  const tabs=[['home','🏠 Home'],['learn','🎓 Lessons'],['songs','🎵 Songs'],['practice','🏋 Practice'],['progress','📈 Progress']];
   $('#snav').innerHTML=tabs.map(([k,l])=>`<button data-s="${k}" class="${k===name?'on':''}">${l}</button>`).join('')+'<span class="sp"></span><button class="kb" data-s="close">🎹 Keyboard</button>';
   $('#snav').querySelectorAll('button').forEach(b=>b.onclick=()=>b.dataset.s==='close'?closeScreen():openScreen(b.dataset.s));
-  ({home:renderHome, learn:renderLearn, practice:renderPractice, progress:renderProgress})[name]();
+  ({home:renderHome, learn:renderLearn, songs:renderSongs, practice:renderPractice, progress:renderProgress})[name]();
   $('#screen').hidden=false; $('#screen').scrollTop=0;
 }
 function closeScreen(){ $('#screen').hidden=true; screenName=null; }
@@ -934,7 +940,7 @@ function renderHome(){
           :`<div class="tile"><span class="ic">👑</span><span><b>All lessons complete!</b><small>Keep them fresh with review and drills.</small></span></div>`}
       <button class="tile" id="rev" ${due.length?'':'disabled'}><span class="ic">↻</span><span><b>${due.length?`Review ${due.length} lesson${due.length>1?'s':''}`:'Review: all caught up'}</b><small>${due.length?'Refresh what you learned before you forget it.':'Lessons come back here when it\'s time to refresh them.'}</small></span></button>
       <button class="tile" id="drl"><span class="ic">🎯</span><span><b>Drills & tools</b><small>Notes, chords, rhythm, scales, by ear, speed trainer</small></span></button>
-      <button class="tile" id="free"><span class="ic">🎵</span><span><b>Free play</b><small>Songs and your own MIDI files</small></span></button>
+      <button class="tile" id="songs"><span class="ic">🎵</span><span><b>Songs</b><small>${self.SONGS?SONGS.length+' ':''}public-domain songs, plus your own MIDI files</small></span></button>
     </div>
   </div>`;
   bind('#lens button',el=>{ prog.settings.sessionMin=+el.dataset.m; saveProg(); renderHome(); });
@@ -942,7 +948,7 @@ function renderHome(){
   bind('#cont',()=>showIntro(nx));
   bind('#rev',()=>startReview());
   bind('#drl',()=>openScreen('practice'));
-  bind('#free',()=>{ if(!cur||cur.kind!=='free') loadFree(0); closeScreen(); });
+  bind('#songs',()=>openScreen('songs'));
 }
 function startReview(){
   const due=dueLessons(); if(!due.length) return;
@@ -960,6 +966,86 @@ function renderLearn(){
         return `<button class="lesson${ok?' done':''}${l===nx?' next':''}" data-id="${l.id}"><span class="num">${ok?'✓':i+1}</span><span class="t">${esc(l.title)}</span>${due?'<span class="due" title="Ready for review">↻</span>':''}${ok?`<span class="s">${starStr(starsFor(b))}</span>`:''}</button>`; }).join('')}
     </section>`; }).join('')}</div>`;
   bind('.lesson',el=>showIntro(LESSON[el.dataset.id]));
+}
+
+/* ---------- Song library ---------- */
+let libP=null, songQ='', songLvl=0, songCat='';
+const LEVELS={1:'Easy', 2:'Medium', 3:'Harder'}, dots=n=>'●'.repeat(n)+'○'.repeat(3-n);
+function loadLibrary(){   // songs.js is only fetched when needed (or once the app is idle)
+  return libP || (libP=new Promise((res,rej)=>{
+    const el=document.createElement('script'); el.src='songs.js';
+    el.onload=()=>res(self.SONGS);
+    el.onerror=()=>{ el.remove(); libP=null; rej(new Error('Could not load the song library')); };
+    document.head.appendChild(el);
+  }));
+}
+const songById=id=>self.SONGS.find(s=>s.id===id);
+async function songDef(e){   // notes are parsed (or the MIDI file fetched) the first time a song is opened
+  if(e.def) return e.def;
+  let d;
+  if(e.mid){
+    const r=await fetch(e.mid); if(!r.ok) throw new Error('Could not load '+e.mid);
+    const p=parseMidiFile(await r.arrayBuffer());
+    d={notes:p.notes, beat:p.beat, split:e.split, meter:e.meter};
+  } else d={bpm:e.bpm, meter:e.meter, pulse:e.pulse, split:e.split, rh:e.rh, lh:e.lh};
+  d.title=e.title;
+  return e.def=prep(d);
+}
+const songItem=e=>({kind:'free', song:e, def:e.def, title:e.title, sub:'🎵 Song'});
+function startSong(e,listen){ session=null; trainer=null; e.def.mode=prog.settings.songMode||'wait'; startItem(songItem(e),listen); }
+
+function renderSongs(){
+  if(!self.SONGS){
+    B.innerHTML='<p class="muted">Loading songs…</p>';
+    loadLibrary().then(()=>{ if(screenName==='songs') renderSongs(); },
+      err=>{ if(screenName!=='songs') return; B.innerHTML=`<p class="muted">${esc(err.message)}. Check your connection.</p><button id="retry">Try again</button>`; bind('#retry',renderSongs); });
+    return;
+  }
+  const songCourse=LESSON.p1.course;
+  B.innerHTML=`<input id="sq" class="search" type="search" placeholder="Search ${SONGS.length} songs or composers" value="${esc(songQ)}" autocomplete="off">
+  <div class="chips" id="slv">${[0,1,2,3].map(k=>`<button data-l="${k}" class="${k===songLvl?'on':''}">${k?dots(k)+' '+LEVELS[k]:'All levels'}</button>`).join('')}</div>
+  <div class="chips" id="sct"><button data-c="" class="${songCat?'':'on'}">All</button>${Object.entries(SONG_CATS).map(([k,l])=>`<button data-c="${k}" class="${k===songCat?'on':''}">${l}</button>`).join('')}</div>
+  <div id="slist"></div>
+  <h2 class="sec">More songs</h2>
+  <div class="grid">
+    <div class="box"><h3>${songCourse.icon} Song lessons</h3><p>Learn a song step by step, with tips and finger numbers.</p>
+      <div class="chips">${songCourse.lessons.map(l=>`<button data-id="${l.id}" class="sl">${passed(l.id)?'✓ ':''}${esc(l.title)}</button>`).join('')}</div></div>
+    <div class="box"><h3>📄 Your own MIDI file</h3><p>Open any .mid file on this device and choose which tracks to play.</p><button id="openMid">Open .mid file</button></div>
+  </div>`;
+  renderSongList();
+  $('#sq').oninput=e=>{ songQ=e.target.value; renderSongList(); };
+  bind('#slv button',el=>{ songLvl=+el.dataset.l; renderSongs(); });
+  bind('#sct button',el=>{ songCat=el.dataset.c; renderSongs(); });
+  bind('.sl',el=>showIntro(LESSON[el.dataset.id]));
+  bind('#openMid',()=>$('#file').click());
+}
+function renderSongList(){
+  const q=songQ.trim().toLowerCase();
+  const list=SONGS.filter(s=>(!songLvl||s.level===songLvl) && (!songCat||s.cat===songCat) && (!q||(s.title+' '+s.by).toLowerCase().includes(q)));
+  const row=s=>{ const r=prog.songs[s.id];
+    return `<button class="song" data-id="${s.id}"><span class="t"><b>${esc(s.title)}</b><small>${esc(s.by)}</small></span>
+      ${r&&r.best?`<span class="s" title="Your best">${starStr(starsFor(r.best))}<small>${r.best}%</small></span>`:''}<span class="lvl" title="${LEVELS[s.level]}">${dots(s.level)}</span></button>`; };
+  $('#slist').innerHTML = !list.length ? '<p class="muted">No songs match your search.</p>' :
+    Object.keys(SONG_CATS).map(c=>{ const ss=list.filter(s=>s.cat===c); return ss.length ? `<h2 class="sec">${SONG_CATS[c]} <span class="muted">· ${ss.length}</span></h2><div class="songs">${ss.map(row).join('')}</div>` : ''; }).join('');
+  $('#slist').querySelectorAll('.song').forEach(el=>el.onclick=()=>showSong(songById(el.dataset.id)));
+}
+async function showSong(e){
+  let d; try{ d=await songDef(e); }catch(err){ return toast('⚠ '+err.message); }
+  const r=prog.songs[e.id], len=d.notes.reduce((m,n)=>Math.max(m,n.start+n.dur),0), card=$('#introCard');
+  card.innerHTML=`<div class="kicker">${SONG_CATS[e.cat]} · ${dots(e.level)} ${LEVELS[e.level]}</div>
+    <h2>${esc(e.title)}</h2><p class="muted">${esc(e.by)}</p>
+    <div class="meta">${fmtTime(len)} at full speed · ${d.both?'both hands':'one hand'}${r?` · best ${r.best}% · played ${r.plays}×`:''}</div>
+    ${d.both?`<div class="seg" id="sgHands"><button data-h="right">Right hand</button><button data-h="left">Left hand</button><button data-h="both">Both hands</button></div><br>`:''}
+    <div class="seg" id="sgMode"><button data-m="wait">⏸ Wait for me</button><button data-m="play">⏱ Play along</button></div>
+    <div class="btns"><button class="primary" id="sgStart">▶ Start</button><button id="sgListen">👂 Listen</button><button id="sgTrain">⚡ Speed trainer</button><button id="sgBack">Back</button></div>`;
+  const seg=(id,key,get,set)=>{ const el=$(id); if(!el) return; const sync=()=>el.querySelectorAll('button').forEach(b=>b.classList.toggle('on',b.dataset[key]===get())); el.querySelectorAll('button').forEach(b=>b.onclick=()=>{ set(b.dataset[key]); sync(); }); sync(); };
+  seg('#sgHands','h',()=>hands,setHands);
+  seg('#sgMode','m',()=>prog.settings.songMode||'wait',m=>{ prog.settings.songMode=m; saveProg(); });
+  $('#sgStart').onclick=()=>startSong(e,false);
+  $('#sgListen').onclick=()=>startSong(e,true);
+  $('#sgTrain').onclick=()=>startTrainer(songItem(e));
+  $('#sgBack').onclick=()=>{ $('#intro').hidden=true; };
+  $('#intro').hidden=false;
 }
 
 function renderPractice(){
@@ -983,10 +1069,10 @@ function renderPractice(){
   <h2 class="sec">Tools</h2>
   <div class="grid">
     <div class="box"><h3>⚡ Speed trainer</h3><p>Starts slow in play-along. Every run at 90% or better speeds it up, until you reach your goal speed.</p>
-      <select id="trSel" style="width:100%;margin-bottom:8px">${learnable.map(l=>`<option value="l:${l.id}">${l.course.icon} ${esc(l.title)}</option>`).join('')}${BUILTIN.map((s,i)=>`<option value="b:${i}">🎵 ${esc(s.title)}</option>`).join('')}</select>
+      <select id="trSel" style="width:100%;margin-bottom:8px">${learnable.map(l=>`<option value="l:${l.id}">${l.course.icon} ${esc(l.title)}</option>`).join('')}${(self.SONGS||[]).map(s=>`<option value="s:${s.id}">🎵 ${esc(s.title)}</option>`).join('')}</select>
       <div class="chips"><span class="muted" style="align-self:center">Start at</span><select id="trStart">${[0.4,0.5,0.6,0.7].map(s=>`<option value="${s}"${s===0.5?' selected':''}>${s*100}%</option>`).join('')}</select><span class="muted" style="align-self:center">goal</span><select id="trGoal">${[0.8,0.9,1,1.1,1.25].map(s=>`<option value="${s}"${s===1?' selected':''}>${Math.round(s*100)}%</option>`).join('')}</select></div>
       <button class="primary" id="trGo">⚡ Start</button></div>
-    <div class="box"><h3>🎵 Free play</h3><p>Play any song or open your own MIDI file, with the hand, speed and metronome options.</p><button id="free">Open keyboard</button></div>
+    <div class="box"><h3>🎵 Songs</h3><p>Browse the song library or open your own MIDI file, with the hand, speed and metronome options.</p><button id="songs">Browse songs</button></div>
   </div>`;
   bind('#lens button',el=>{ prog.settings.sessionMin=+el.dataset.m; saveProg(); renderPractice(); });
   bind('#startMix',()=>startSession(prog.settings.sessionMin||10));
@@ -995,8 +1081,13 @@ function renderPractice(){
   bind('.dueL',el=>startItem(lessonItem(LESSON[el.dataset.id])));
   bind('#dmode button',el=>{ prog.settings.drillMode=el.dataset.m; saveProg(); renderPractice(); });
   bind('[data-d]',el=>{ trainer=null; session=null; startItem(DRILLS.find(d=>d.id===el.dataset.d).make(el.dataset.v)); });
-  bind('#trGo',()=>{ const [k,v]=$('#trSel').value.split(':'); const it=k==='l'?lessonItem(LESSON[v]):{kind:'free',def:BUILTIN[+v],title:BUILTIN[+v].title,sub:'🎵 Song'}; startTrainer(it, +$('#trStart').value, +$('#trGoal').value); });
-  bind('#free',()=>{ if(!cur||cur.kind!=='free') loadFree(0); closeScreen(); });
+  bind('#trGo',async()=>{
+    const [k,v]=$('#trSel').value.split(':'), sp=+$('#trStart').value, goal=+$('#trGoal').value;
+    if(k==='l') return startTrainer(lessonItem(LESSON[v]), sp, goal);
+    const e=songById(v); try{ await songDef(e); }catch(err){ return toast('⚠ '+err.message); }
+    startTrainer(songItem(e), sp, goal);
+  });
+  bind('#songs',()=>openScreen('songs'));
 }
 
 function renderProgress(){
@@ -1018,6 +1109,7 @@ function renderProgress(){
     <div class="stat"><b>${nPassed()}/${ALL_LESSONS.length}</b><small>lessons complete</small></div>
     <div class="stat"><b>${prog.counts.sessions}</b><small>sessions · ${prog.counts.drills} drills</small></div>
     <div class="stat"><b>${nA}/${ACH.length}</b><small>achievements</small></div>
+    <div class="stat"><b>🎵 ${nSongs()}</b><small>songs played at ${PASS}%+</small></div>
   </div>
   <h2 class="sec">Minutes practised, last 14 days</h2><div class="box">${chart}</div>
   <div class="grid" style="margin-top:12px">
@@ -1105,8 +1197,9 @@ function showIntro(L, it){
 /* =====================================================================
    Boot
    ===================================================================== */
-loadFree(0);
+freeKeyboard();
 connectMidi();
 requestAnimationFrame(frame);
 openScreen('home');
+setTimeout(()=>loadLibrary().catch(()=>{}), 2000);   // fetch the song list in the background
 if('serviceWorker' in navigator && location.protocol==='https:') navigator.serviceWorker.register('sw.js').catch(()=>{});

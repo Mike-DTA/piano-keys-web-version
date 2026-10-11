@@ -16,7 +16,7 @@ html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font:14px/
 header{background:var(--panel);padding:6px 8px;padding-left:max(8px,env(safe-area-inset-left));padding-right:max(8px,env(safe-area-inset-right))}
 .row{display:flex;gap:6px;align-items:center;overflow-x:auto;white-space:nowrap;scrollbar-width:none}
 .row::-webkit-scrollbar{display:none}
-select,button,.file{background:var(--panel2);color:var(--text);border:1px solid var(--line);border-radius:8px;padding:7px 10px;font:inherit;cursor:pointer;flex:none}
+select,button{background:var(--panel2);color:var(--text);border:1px solid var(--line);border-radius:8px;padding:7px 10px;font:inherit;cursor:pointer;flex:none}
 button[aria-pressed="false"]{opacity:.45}
 button:disabled{opacity:.4;cursor:default}
 .primary{background:var(--accent);border-color:var(--accent);color:#0b0e1a;font-weight:600;min-width:84px}
@@ -96,6 +96,18 @@ h2.sec{font-size:13px;text-transform:uppercase;letter-spacing:.07em;color:var(--
 .lesson .s{color:var(--star);font-size:12px;letter-spacing:1px}
 .lesson .due{color:var(--left);font-size:12px}
 
+/* Songs */
+.search{width:100%;background:var(--panel);color:var(--text);border:1px solid var(--line);border-radius:10px;padding:10px 12px;font:inherit;font-size:15px;margin:4px 0 8px}
+.search:focus{outline:none;border-color:var(--accent)}
+.songs{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:8px}
+.song{display:flex;align-items:center;gap:10px;width:100%;text-align:left;padding:10px 12px;white-space:normal}
+.song .t{flex:1;min-width:0}
+.song b{display:block;font-weight:600}
+.song small{color:var(--muted);font-size:12px}
+.song .s{color:var(--star);font-size:12px;letter-spacing:1px;text-align:right;flex:none}
+.song .s small{display:block;letter-spacing:0}
+.song .lvl{color:var(--accent);font-size:11px;letter-spacing:1px;flex:none}
+
 /* Progress */
 .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px}
 .stat{background:var(--panel);border-radius:12px;padding:10px 12px}
@@ -154,8 +166,7 @@ h2.sec{font-size:13px;text-transform:uppercase;letter-spacing:.07em;color:var(--
   <header>
     <div class="row">
       <button id="homeBtn" class="homebtn">🏠 Menu</button>
-      <select id="song" aria-label="Song"></select>
-      <label class="file">Open .mid<input type="file" id="file" accept=".mid,.midi,audio/midi,audio/x-midi" hidden></label>
+      <button id="songsBtn">🎵 Songs</button>
       <select id="mode" aria-label="Mode">
         <option value="wait">Wait for me</option>
         <option value="play">Play along</option>
@@ -199,6 +210,7 @@ h2.sec{font-size:13px;text-transform:uppercase;letter-spacing:.07em;color:var(--
 <div id="intro" class="overlay" hidden><div class="card intro" id="introCard"></div></div>
 <div id="toasts"></div>
 <input type="file" id="importFile" accept=".json,application/json" hidden>
+<input type="file" id="file" accept=".mid,.midi,audio/midi,audio/x-midi" hidden>
 
 <script src="content.js"></script>
 <script src="app.js"></script>

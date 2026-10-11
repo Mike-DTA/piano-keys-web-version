@@ -1,6 +1,6 @@
 'use strict';
 /* =====================================================================
-   Keys — content: songs, courses, skills, learning path
+   Keys — content: courses, skills, learning path (the song library is in songs.js)
    ---------------------------------------------------------------------
    Notation: tokens separated by spaces. A token is one or more notes joined
    with +, optionally followed by :beats (how far to advance, default 1).
@@ -9,6 +9,7 @@
      @n           finger number (1 = thumb … 5 = pinky)
      ~beats       this note's own length (e.g. a held bass under a melody)
      [label]      chord name shown above the notes, prefix of the token
+     |            bar line (ignored when playing)
    Example: [C]C4@1+E4@3+G4@5:2   C4@1+C3@5~4   E4:0.5
    ===================================================================== */
 
@@ -28,16 +29,6 @@ const SKILLS = {
   'songs':  'Playing songs',
   'ear':    'Playing by ear',
 };
-
-/* ---------- Free-play songs (public domain) ---------- */
-const BUILTIN = [
-  {title:'C major scale', bpm:80, src:'C4 D4 E4 F4 G4 A4 B4 C5 B4 A4 G4 F4 E4 D4 C4:2'},
-  {title:'Mary Had a Little Lamb', bpm:90, src:'E4 D4 C4 D4 E4 E4 E4:2 D4 D4 D4:2 E4 G4 G4:2 E4 D4 C4 D4 E4 E4 E4 E4 D4 D4 E4 D4 C4:4'},
-  {title:'Twinkle Twinkle', bpm:90, src:'C4 C4 G4 G4 A4 A4 G4:2 F4 F4 E4 E4 D4 D4 C4:2 G4 G4 F4 F4 E4 E4 D4:2 G4 G4 F4 F4 E4 E4 D4:2 C4 C4 G4 G4 A4 A4 G4:2 F4 F4 E4 E4 D4 D4 C4:2'},
-  {title:'Ode to Joy', bpm:100, src:'E4 E4 F4 G4 G4 F4 E4 D4 C4 C4 D4 E4 E4:1.5 D4:0.5 D4:2 E4 E4 F4 G4 G4 F4 E4 D4 C4 C4 D4 E4 D4:1.5 C4:0.5 C4:2'},
-  {title:'Ode to Joy (both hands)', bpm:84, src:'E4+C3 E4 F4 G4 G4+G3 F4 E4 D4 C4+C3 C4 D4 E4 E4+G3:1.5 D4:0.5 D4:2 E4+C3 E4 F4 G4 G4+G3 F4 E4 D4 C4+C3 C4 D4 E4 D4+G3:1.5 C4:0.5 C4+C3:2'},
-  {title:'Für Elise (opening)', bpm:150, src:'E5 D#5 E5 D#5 E5 B4 D5 C5 A4:2 R C4 E4 A4 B4:2 R E4 G#4 B4 C5:2 R E4 E5 D#5 E5 D#5 E5 B4 D5 C5 A4:2 R C4 E4 A4 B4:2 R E4 C5 B4 A4:3'},
-];
 
 /* ---------- Helpers for writing lessons ---------- */
 const LH = (notes,len)=>notes.split(' ').map(n=>n+'~'+len).join('+');   // chord where every note has its own length

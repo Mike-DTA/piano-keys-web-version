@@ -6,11 +6,12 @@ Falling-notes piano trainer for Chrome on Android, using your digital piano over
 | File | What's in it |
 |---|---|
 | `index.html` | Markup and styles |
-| `content.js` | All songs, courses and lessons, skills, learning path (edit this to add content) |
+| `content.js` | Courses and lessons, skills, learning path |
+| `songs.js` | Song library (public domain), loaded only when needed |
 | `app.js` | Engine, progress, drills, sessions, screens |
 | `sw.js`, `manifest.json`, icons | Install as an app / offline |
 
-To update a hosted copy, upload all files (at least `index.html`, `content.js`, `app.js`, `sw.js`).
+To update a hosted copy, upload all files (at least `index.html`, `content.js`, `songs.js`, `app.js`, `sw.js`).
 
 ## Run it on your phone
 Web MIDI needs a secure context (https or localhost).
@@ -30,6 +31,9 @@ Connect the piano with a USB-OTG cable and allow MIDI access.
 - **🏠 Home:** level & XP, day streak, daily-goal ring, *Today's practice*, continue learning, review.
 - **🎓 Lessons:** 48 lessons in 6 courses: Basics, Rhythm, Chords, Scales & keys, Two hands, Songs.
   Pass with 80% (★ 80, ★★ 90, ★★★ 97). Chord lessons require all chord keys held together.
+- **🎵 Songs:** 35 public-domain pieces (children's songs, folk & hymns, holiday, classical), with search and
+  filters by level and category. Each has right- and left-hand parts; pick hands, Wait or Play along, Listen,
+  or the speed trainer. Your best score is saved per song. Also links to the song lessons and opens your own `.mid` files.
 - **🏋 Practice**
   - *Mixed session* (5–45 min): warm-up → new lessons → review and drills interleaved → a song,
     with a short countdown between exercises and a summary at the end.
@@ -50,6 +54,21 @@ Each note is `NAME[@finger][~beats]`; prefix a token with `[Am]` to show a chord
 ```
 {title:'My song', bpm:90, src:'[C]C4@1+C3@5~4 E4@3 G4@5:2 C4+E4+G4:4 R F4'}
 ```
+
+## Adding songs
+Add an entry to `SONGS` in `songs.js`:
+```
+{id:'my-song', title:'My song', by:'Composer, 1850', cat:'folk', level:1, bpm:96, meter:3,
+ rh:'E4 E4 G4:2 | ...', lh:'C3:3 | ...'}
+```
+`rh` and `lh` are the two hands in the notation above; `|` marks bar lines (ignored when playing, but handy for checking
+that both hands line up). `bpm` counts the notation's beat unit; for 6/8 or fast pieces write in eighths and set
+`pulse` (units per metronome click), e.g. `bpm:180, meter:2, pulse:3`. `level` is 1–3; `cat` is a key of `SONG_CATS`.
+
+**MIDI files:** put them in a `midi/` folder and add `{id, title, by, cat, level, mid:'midi/name.mid'}`. They are
+fetched only when opened and cached for offline use by the service worker. Hands are split at middle C (set `split` to change).
+Only add files you are allowed to share: the composition being old is not enough, since a MIDI sequence can have its
+own copyright (Mutopia Project files marked Public Domain are safe).
 
 ## Adding lessons
 Add an entry to a course in `COURSES` (content.js) and its id to `PATH`:
