@@ -61,7 +61,7 @@ function parseMidiFile(buf){
   if(str(4)!=='MThd') throw new Error('Not a MIDI file');
   const hlen=u32(); u16(); const ntr=u16(), div=u16(); p = 8+hlen;
   if(div & 0x8000) throw new Error('SMPTE-timed MIDI files are not supported');
-  const tempos=[{tick:0,usq:500000}], raw=[], tracks=[];
+  const tempos=[{tick:0,usq:500000}], raw=[], tracks=[]; let ts=null;
   for(let ti=0; p+8<=v.byteLength && tracks.length<ntr; ti++){
     const id=str(4), len=u32(), end=Math.min(p+len, v.byteLength);
     if(id!=='MTrk'){ p=end; continue; }
@@ -73,6 +73,7 @@ function parseMidiFile(buf){
       if(st===0xff){
         const type=u8(), l=vlq();
         if(type===0x03 && !name){ name=str(l).replace(/[^\x20-\x7e]/g,'').trim(); continue; }
+        if(type===0x58 && !ts) ts={n:v.getUint8(p), d:2**v.getUint8(p+1)};
         if(type===0x51) tempos.push({tick, usq:(v.getUint8(p)<<16)|(v.getUint8(p+1)<<8)|v.getUint8(p+2)});
         p += l;
       } else if(st===0xf0 || st===0xf7){ p += vlq(); }
@@ -94,7 +95,7 @@ function parseMidiFile(buf){
   const first = notes.length ? Math.min(...notes.map(n=>n.start)) : 0;
   notes.forEach(n=>n.start-=first);
   const t0 = tempos.filter(t=>t.tick===0).pop();
-  return {tracks:tracks.filter(t=>t.count>0), notes, beat:t0.usq/1e6};
+  return {tracks:tracks.filter(t=>t.count>0), notes, beat:t0.usq/1e6, ts};
 }
 
 /* ---------- Content index ---------- */
@@ -193,8 +194,8 @@ const ACH = [
   {id:'sess10', i:'🏋', n:'Regular', d:'Finish 10 practice sessions', t:()=>prog.counts.sessions>=10},
   {id:'drill25', i:'🎯', n:'Drill sergeant', d:'Complete 25 drills', t:()=>prog.counts.drills>=25},
   {id:'ear10', i:'👂', n:'Golden ears', d:'Pass 10 play-by-ear drills', t:()=>prog.counts.ear>=10},
-  {id:'songs5', i:'🎵', n:'Repertoire', d:`Play 5 library songs at ${PASS}% or better`, t:()=>nSongs()>=5},
-  {id:'songs20', i:'🎼', n:'Songbook', d:`Play 20 library songs at ${PASS}% or better`, t:()=>nSongs()>=20},
+  {id:'songs5', i:'🎵', n:'Repertoire', d:`Play 5 different songs at ${PASS}% or better`, t:()=>nSongs()>=5},
+  {id:'songs20', i:'🎼', n:'Songbook', d:`Play 20 different songs at ${PASS}% or better`, t:()=>nSongs()>=20},
   {id:'speed', i:'🚀', n:'Up to speed', d:'Reach your goal speed in the speed trainer', t:()=>prog.counts.trainer>=1},
   {id:'lv5', i:'🎖', n:'Level 5', d:'Reach level 5', t:()=>levelInfo(prog.xp).L>=5},
   {id:'lv10', i:'🏅', n:'Level 10', d:'Reach level 10', t:()=>levelInfo(prog.xp).L>=10},
@@ -218,8 +219,8 @@ const OTHER='#4a5070';           // notes the app plays for the hand you're not 
 
 let song=null, notes=[], groups=[], gi=0, si=0, songEnd=0, songBeat=0.5, meter=4, lastBeat=null;
 let t=-LEAD, playing=false, finished=false, waiting=false, mode='wait', speed=1, hands='both';
-let soundOn=false, labelsOn=true, metroOn=false, metroPref=false, lastTs=0, midiFile=null, together=false, previewPhase=false;
-let cur=null;         // what's loaded: {kind:'lesson'|'drill'|'free'|'file', def, title, sub, tip, lesson?, regen?, section?}
+let soundOn=false, labelsOn=true, metroOn=false, metroPref=false, lastTs=0, together=false, previewPhase=false;
+let cur=null;         // what's loaded: {kind:'lesson'|'drill'|'free', def, title, sub, tip, lesson?, regen?, section?}
 let session=null;     // practice session in progress
 let trainer=null;     // speed trainer in progress
 let stats; resetStats();
@@ -418,7 +419,6 @@ function startItem(it, listen=false){
   if(!d.both && hands!=='both') setHands('both');
   previewPhase = !listen && !!d.preview;
   mode = (listen||previewPhase) ? 'listen' : d.mode; $('#mode').value=mode;
-  $('#tracks').hidden=true;
   loadSong(d);
   togglePlay();
 }
@@ -452,12 +452,12 @@ function finish(){
     return;
   }
   const acc=accuracy();
-  if(mode==='listen' && cur && cur.kind!=='free' && cur.kind!=='file')
+  if(mode==='listen' && cur && cur.kind!=='free')
     return setResult(cur.title,null,'♪','Your turn! Now play it yourself.',[{label:'▶ Start',primary:true,fn:()=>startItem(cur,false)},session?{label:'Skip',fn:()=>{ session.idx++; sessionCard(null); }}:{label:'Menu',fn:()=>openScreen('learn')}]);
   const res=recordRun(acc);
   if(session) return sessionAfter(acc,res);
   if(trainer) return trainerAfter(acc,res);
-  if(!cur || cur.kind==='free' || cur.kind==='file') return freeFinish(acc,res);
+  if(!cur || cur.kind==='free') return freeFinish(acc,res);
   if(cur.kind==='lesson') return lessonFinish(acc,res);
   return drillFinish(acc,res);
 }
@@ -493,7 +493,6 @@ function freeFinish(acc,res){
   let detail=statLine();
   if(res && res.songBest!=null) detail+=` · personal best ${res.songBest}%`;
   else if(cur && cur.song) detail+=' · one-hand practice (play both hands to set a best score)';
-  else{ let bestS=acc; try{ const k='keys.best.'+(profiles.active==='p1'?'':profiles.active+'.')+song.title+'.'+mode; bestS=Math.max(acc, +(localStorage.getItem(k)||0)); localStorage.setItem(k,bestS); }catch(e){} detail+=` · personal best ${bestS}%`; }
   const title = res && res.songBest!=null && res.prevBest && acc>res.prevBest ? '🎉 New best · '+song.title : song.title;
   setResult(title, cur&&cur.song?starsFor(acc):null, acc+'%', detail, [{label:'Again',primary:true,fn:()=>{restart();togglePlay();}},{label:'⚡ Speed trainer',fn:()=>startTrainer(cur)},back], {xp:res&&res.xp});
 }
@@ -606,12 +605,43 @@ function genEar(v){
   return drillItem({src:toks.join(' '), bpm:76, mode:'wait', hidden:true, preview:true, ear:true, skills:['ear'], tip:'Listen, then find the notes. It always starts on middle C. After two misses the key is shown.'}, 'Play by ear · '+EARS[v].label, ()=>genEar(v));
 }
 
+
+/* Pop chords: progressions behind countless hits (a chord progression on its own is free to use) */
+const PV={   // right-hand voicings around middle C, so changes need little movement; [3] is the left-hand root
+  C:['C4@1','E4@3','G4@5','C3'], G:['B3@1','D4@2','G4@5','G2'], Am:['C4@1','E4@2','A4@5','A2'], F:['C4@1','F4@3','A4@5','F2'],
+  E:['B3@1','E4@3','G#4@5','E2'],
+};
+const POP={
+  four:   {label:'I–V–vi–IV · Four-chord pop', ch:['C','G','Am','F'], need:'c6', songs:'Let It Be, Someone Like You, With or Without You, I\'m Yours'},
+  fifties:{label:'I–vi–IV–V · \'50s progression', ch:['C','Am','F','G'], need:'c6', songs:'Stand By Me, Every Breath You Take, Earth Angel'},
+  minor:  {label:'vi–IV–I–V · Minor start', ch:['Am','F','C','G'], need:'c6', songs:'Zombie, Save Tonight'},
+  three:  {label:'I–IV–V · Three-chord rock', ch:['C','F','G','F'], need:'c3', songs:'La Bamba, Twist and Shout, Wild Thing'},
+  andal:  {label:'i–VII–VI–V · Andalusian', ch:['Am','G','F','E'], need:'c6', songs:'Hit the Road Jack, Runaway'},
+  blues:  {label:'12-bar blues', ch:['C','C','C','C','F','F','C','C','G','F','C','G'], need:'c3', songs:'Johnny B. Goode, Hound Dog, Rock Around the Clock'},
+};
+const POPSTYLE={   // right-hand rhythm for one bar of a chord
+  held:  {label:'held chords', rh:V=>[V.slice(0,3).join('+')+':4']},
+  beats: {label:'four beats', rh:V=>Array(4).fill(V.slice(0,3).join('+')+':1')},
+  pop:   {label:'pop rhythm 3+3+2', rh:V=>[1.5,1.5,1].map(b=>V.slice(0,3).join('+')+':'+b)},
+  broken:{label:'broken chord', rh:V=>[0,1,2,1,0,1,2,1].map(i=>V[i]+':.5')},
+};
+function genPop(v,m,style){
+  m=dmode(m); const P=POP[v], st=style||rnd(Object.keys(POPSTYLE)), S=POPSTYLE[st];
+  const seq = P.ch.length>4 ? P.ch : [...P.ch, ...P.ch];
+  const bar=c=>{ const V=PV[c], t=S.rh(V); t[0]=`[${c}]`+t[0].replace(':', `+${V[3]}~4:`); return t.join(' '); };
+  const F=PV[seq[0]];
+  const src=seq.map(bar).join(' | ')+` | [${seq[0]}]${F.slice(0,3).join('+')}+${F[3]}:4`;
+  const skills=['chords','hands', ...(P.ch.some(c=>c.includes('m'))?['minor']:[])];
+  return drillItem({src, bpm:m==='play'?(st==='broken'?72:84):70, mode:m, together:true, metro:true, split:50, skills,
+    tip:`${[...new Set(P.ch)].join(' – ')} · ${S.label} · heard in ${P.songs} and many more`}, 'Pop chords · '+P.label.split(' · ').pop(), ()=>genPop(v,m));
+}
 const DRILLS=[
   {id:'notes', icon:'🎯', title:'Note finder', desc:'Random notes in one hand position. Builds a feel for where every key is.', modeable:true, variants:POS, make:v=>genNotes(v)},
   {id:'chords', icon:'🎹', title:'Chord changes', desc:'Random chord progressions. Press each chord with all its keys together.', modeable:true, variants:CSETS, make:v=>genChords(v)},
   {id:'rhythm', icon:'🥁', title:'Rhythm reading', desc:'A new rhythm every time, played in tempo with the metronome.', variants:RLEVEL, make:v=>genRhythm(v)},
   {id:'scales', icon:'📈', title:'Scale run', desc:'Scales twice through, in tempo with the metronome.', variants:Object.fromEntries(Object.entries(SCALES).map(([k,s])=>[k,{label:s.label,need:s.l}])), make:v=>genScale(v)},
   {id:'hands', icon:'🙌', title:'Hand coordination', desc:'Random two-hand patterns: turns, parallel, mirror, melody + bass.', modeable:true, variants:HANDS, make:v=>genHands(v)},
+  {id:'pop', icon:'🎤', title:'Pop chords', desc:'The chord progressions behind countless hits: chords in the right hand, the bass note in the left. A new accompaniment style each time.', modeable:true, variants:POP, make:v=>genPop(v)},
   {id:'ear', icon:'👂', title:'Play by ear', desc:'Hear a short melody, then find it. The notes stay hidden.', variants:EARS, make:v=>genEar(v)},
 ];
 
@@ -624,6 +654,7 @@ function drillPool(fsk){
   for(const [k,r] of Object.entries(RLEVEL)) if(ok(r.need)) add(['rhythm'],()=>genRhythm(k));
   for(const [k,s] of Object.entries(SCALES)) if(ok(s.l)) add(LESSON[s.l].skills,()=>genScale(k));
   for(const [k,h] of Object.entries(HANDS)) if(ok(h.need)) add(['hands'],()=>genHands(k));
+  for(const [k,p] of Object.entries(POP)) if(ok(p.need)) add(['chords','hands'],()=>genPop(k));
   if(passed('b2')) add(['ear'],()=>genEar(3));
   if(passed('b8')) add(['ear'],()=>genEar(5));
   if(passed('b7')) add(['ear'],()=>genEar('wide'));
@@ -845,7 +876,7 @@ function draw(){
    ===================================================================== */
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 function updateHud(){
-  const title = cur && cur.kind!=='free' && cur.kind!=='file' ? `${esc(cur.sub||'')} · ${esc(cur.title)}` : esc(song?song.title:'');
+  const title = cur && cur.kind!=='free' ? `${esc(cur.sub||'')} · ${esc(cur.title)}` : esc(song?song.title:'');
   const tip = cur && cur.tip ? `<small class="tip">${esc(cur.tip)}</small>` : '';
   const handTxt = hands==='both' ? '' : ` · ${hands} hand only`;
   const sess = session ? `<small class="sess">Session ${session.idx+1}/${session.items.length} · ${fmtTime(session.sec)} / ~${session.est}:00</small>`
@@ -870,7 +901,7 @@ function togglePlay(){
   updateUI();
 }
 
-function freeKeyboard(){ cur=null; session=null; trainer=null; $('#tracks').hidden=true; loadSong(prep({title:'Free play', notes:[]})); }
+function freeKeyboard(){ cur=null; session=null; trainer=null; loadSong(prep({title:'Free play', notes:[]})); }
 $('#songsBtn').onclick=()=>openScreen('songs');
 $('#mode').onchange=e=>{ mode=e.target.value; previewPhase=false; restart(); };
 $('#hands').onchange=e=>{ hands=e.target.value; restart(); };
@@ -888,24 +919,7 @@ $('#intro').onclick=e=>{ if(e.target.id==='intro') $('#intro').hidden=true; };
 $('#fs').onclick=async()=>{
   try{ if(!document.fullscreenElement){ await document.documentElement.requestFullscreen(); await screen.orientation.lock('landscape'); } else await document.exitFullscreen(); }catch(e){}
 };
-$('#file').onchange=async e=>{
-  const f=e.target.files[0]; if(!f) return;
-  try{
-    const parsed=parseMidiFile(await f.arrayBuffer());
-    if(!parsed.notes.length) throw new Error('No notes found in this file');
-    session=null; trainer=null;
-    midiFile={title:f.name.replace(/\.midi?$/i,''), ...parsed, on:new Set(parsed.tracks.map(t=>t.index))};
-    $('#tracks').innerHTML = 'Tracks: ' + parsed.tracks.map(t=>`<label><input type="checkbox" data-t="${t.index}" checked> ${esc(t.name)} (${t.count})</label>`).join('');
-    $('#tracks').querySelectorAll('input').forEach(cb=>cb.onchange=()=>{ const i=+cb.dataset.t; cb.checked?midiFile.on.add(i):midiFile.on.delete(i); loadFileSong(); });
-    loadFileSong();
-  }catch(err){ alert('Could not open MIDI file: '+err.message); }
-  e.target.value='';
-};
-function loadFileSong(){
-  const def={title:midiFile.title, notes:midiFile.notes.filter(x=>midiFile.on.has(x.track)), beat:midiFile.beat};
-  cur={kind:'file', def, title:def.title}; $('#tracks').hidden=false;
-  closeScreen(); loadSong(def);
-}
+$('#file').onchange=async e=>{ const fs=[...e.target.files]; e.target.value=''; if(fs.length) importFiles(fs); };
 addEventListener('resize',layout);
 let hiddenAt=0;
 document.addEventListener('visibilitychange',()=>{
@@ -954,7 +968,7 @@ function renderHome(){
           :`<div class="tile"><span class="ic">👑</span><span><b>All lessons complete!</b><small>Keep them fresh with review and drills.</small></span></div>`}
       <button class="tile" id="rev" ${due.length?'':'disabled'}><span class="ic">↻</span><span><b>${due.length?`Review ${due.length} lesson${due.length>1?'s':''}`:'Review: all caught up'}</b><small>${due.length?'Refresh what you learned before you forget it.':'Lessons come back here when it\'s time to refresh them.'}</small></span></button>
       <button class="tile" id="drl"><span class="ic">🎯</span><span><b>Drills & tools</b><small>Notes, chords, rhythm, scales, by ear, speed trainer</small></span></button>
-      <button class="tile" id="songs"><span class="ic">🎵</span><span><b>Songs</b><small>${self.SONGS?SONGS.length+' ':''}public-domain songs, plus your own MIDI files</small></span></button>
+      <button class="tile" id="songs"><span class="ic">🎵</span><span><b>Songs</b><small>${self.SONGS?SONGS.length+' ':''}public-domain songs, plus your own in My songs</small></span></button>
     </div>
   </div>`;
   bind('#lens button',el=>{ prog.settings.sessionMin=+el.dataset.m; saveProg(); renderHome(); });
@@ -993,11 +1007,12 @@ function loadLibrary(){   // songs.js is only fetched when needed (or once the a
     document.head.appendChild(el);
   }));
 }
-const songById=id=>self.SONGS.find(s=>s.id===id);
+const songById=id=>id.startsWith('my:') ? myEntries().find(s=>s.id===id) : self.SONGS.find(s=>s.id===id);
 async function songDef(e){   // notes are parsed (or the MIDI file fetched) the first time a song is opened
   if(e.def) return e.def;
   let d;
-  if(e.mid){
+  if(e.mine) d={notes:handsFor(e.mine), beat:e.mine.beat, meter:e.mine.meter};
+  else if(e.mid){
     const r=await fetch(e.mid); if(!r.ok) throw new Error('Could not load '+e.mid);
     const p=parseMidiFile(await r.arrayBuffer());
     if(e.hands==='tracks'){   // one track per staff (e.g. Mutopia files): the track with the higher average pitch is the right hand
@@ -1014,22 +1029,25 @@ const songItem=e=>({kind:'free', song:e, def:e.def, title:e.title, sub:'🎵 Son
 function startSong(e,listen){ session=null; trainer=null; e.def.mode=prog.settings.songMode||'wait'; startItem(songItem(e),listen); }
 
 function renderSongs(){
-  if(!self.SONGS){
+  if(!self.SONGS || !mySongs){
     B.innerHTML='<p class="muted">Loading songs…</p>';
-    loadLibrary().then(()=>{ if(screenName==='songs') renderSongs(); },
+    Promise.all([loadLibrary(), loadMySongs()]).then(()=>{ if(screenName==='songs') renderSongs(); },
       err=>{ if(screenName!=='songs') return; B.innerHTML=`<p class="muted">${esc(err.message)}. Check your connection.</p><button id="retry">Try again</button>`; bind('#retry',renderSongs); });
     return;
   }
   const songCourse=LESSON.p1.course;
-  B.innerHTML=`<input id="sq" class="search" type="search" placeholder="Search ${SONGS.length} songs or composers" value="${esc(songQ)}" autocomplete="off">
+  if(songCat==='mine' && !mySongs.length) songCat='';
+  B.innerHTML=`<input id="sq" class="search" type="search" placeholder="Search ${SONGS.length+mySongs.length} songs or composers" value="${esc(songQ)}" autocomplete="off">
   <div class="chips" id="slv">${[0,1,2,3].map(k=>`<button data-l="${k}" class="${k===songLvl?'on':''}">${k?dots(k)+' '+LEVELS[k]:'All levels'}</button>`).join('')}</div>
-  <div class="chips" id="sct"><button data-c="" class="${songCat?'':'on'}">All</button>${Object.entries(SONG_CATS).map(([k,l])=>`<button data-c="${k}" class="${k===songCat?'on':''}">${l}</button>`).join('')}</div>
+  <div class="chips" id="sct"><button data-c="" class="${songCat?'':'on'}">All</button>${Object.entries(songCats()).map(([k,l])=>`<button data-c="${k}" class="${k===songCat?'on':''}">${l}</button>`).join('')}</div>
   <div id="slist"></div>
   <h2 class="sec">More songs</h2>
   <div class="grid">
     <div class="box"><h3>${songCourse.icon} Song lessons</h3><p>Learn a song step by step, with tips and finger numbers.</p>
       <div class="chips">${songCourse.lessons.map(l=>`<button data-id="${l.id}" class="sl">${passed(l.id)?'✓ ':''}${esc(l.title)}</button>`).join('')}</div></div>
-    <div class="box"><h3>📄 Your own MIDI file</h3><p>Open any .mid file on this device and choose which tracks to play.</p><button id="openMid">Open .mid file</button></div>
+    <div class="box"><h3>📁 Add your own songs</h3><p>Import MIDI (.mid) or MusicXML (.musicxml, .mxl) files, for example from MuseScore. They stay on this device, in <b>My songs</b> for every player.</p><button class="primary" id="openMid">＋ Add files</button></div>
+    <div class="box"><h3>🎤 Pop chords</h3><p>Play along with the chord progressions behind countless hits.</p>
+      <div class="chips">${Object.entries(POP).map(([k,p])=>`<button data-p="${k}" class="pp">${esc(p.label.split(' · ').pop())}</button>`).join('')}</div></div>
   </div>`;
   renderSongList();
   $('#sq').oninput=e=>{ songQ=e.target.value; renderSongList(); };
@@ -1037,26 +1055,29 @@ function renderSongs(){
   bind('#sct button',el=>{ songCat=el.dataset.c; renderSongs(); });
   bind('.sl',el=>showIntro(LESSON[el.dataset.id]));
   bind('#openMid',()=>$('#file').click());
+  bind('.pp',el=>startItem(genPop(el.dataset.p)));
 }
 function renderSongList(){
   const q=songQ.trim().toLowerCase();
-  const list=SONGS.filter(s=>(!songLvl||s.level===songLvl) && (!songCat||s.cat===songCat) && (!q||(s.title+' '+s.by).toLowerCase().includes(q)));
+  const list=[...myEntries(), ...SONGS].filter(s=>(!songLvl||s.level===songLvl) && (!songCat||s.cat===songCat) && (!q||(s.title+' '+s.by).toLowerCase().includes(q)));
   const row=s=>{ const r=prog.songs[s.id];
     return `<button class="song" data-id="${s.id}"><span class="t"><b>${esc(s.title)}</b><small>${esc(s.by)}</small></span>
-      ${r&&r.best?`<span class="s" title="Your best">${starStr(starsFor(r.best))}<small>${r.best}%</small></span>`:''}<span class="lvl" title="${LEVELS[s.level]}">${dots(s.level)}</span></button>`; };
+      ${r&&r.best?`<span class="s" title="Your best">${starStr(starsFor(r.best))}<small>${r.best}%</small></span>`:''}${s.level?`<span class="lvl" title="${LEVELS[s.level]}">${dots(s.level)}</span>`:''}</button>`; };
   $('#slist').innerHTML = !list.length ? '<p class="muted">No songs match your search.</p>' :
-    Object.keys(SONG_CATS).map(c=>{ const ss=list.filter(s=>s.cat===c); return ss.length ? `<h2 class="sec">${SONG_CATS[c]} <span class="muted">· ${ss.length}</span></h2><div class="songs">${ss.map(row).join('')}</div>` : ''; }).join('');
+    Object.entries(songCats()).map(([c,label])=>{ const ss=list.filter(s=>s.cat===c); return ss.length ? `<h2 class="sec">${label} <span class="muted">· ${ss.length}</span></h2><div class="songs">${ss.map(row).join('')}</div>` : ''; }).join('');
   $('#slist').querySelectorAll('.song').forEach(el=>el.onclick=()=>showSong(songById(el.dataset.id)));
 }
 async function showSong(e){
   let d; try{ d=await songDef(e); }catch(err){ return toast('⚠ '+err.message); }
   const r=prog.songs[e.id], len=d.notes.reduce((m,n)=>Math.max(m,n.start+n.dur),0), card=$('#introCard');
-  card.innerHTML=`<div class="kicker">${SONG_CATS[e.cat]} · ${dots(e.level)} ${LEVELS[e.level]}</div>
-    <h2>${esc(e.title)}</h2><p class="muted">${esc(e.by)}</p>
+  const M=e.mine;
+  card.innerHTML=`<div class="kicker">${songCats()[e.cat]}${e.level?` · ${dots(e.level)} ${LEVELS[e.level]}`:''}</div>
+    ${M?`<input id="sgTitle" class="search title" maxlength="80" value="${esc(e.title)}" aria-label="Song title">`:`<h2>${esc(e.title)}</h2>`}<p class="muted">${esc(e.by)}</p>
     <div class="meta">${fmtTime(len)} at full speed · ${d.both?'both hands':'one hand'}${r?` · best ${r.best}% · played ${r.plays}×`:''}</div>
     ${d.both?`<div class="seg" id="sgHands"><button data-h="right">Right hand</button><button data-h="left">Left hand</button><button data-h="both">Both hands</button></div><br>`:''}
     <div class="seg" id="sgMode"><button data-m="wait">⏸ Wait for me</button><button data-m="play">⏱ Play along</button></div>
-    <div class="btns"><button class="primary" id="sgStart">▶ Start</button><button id="sgListen">👂 Listen</button><button id="sgTrain">⚡ Speed trainer</button><button id="sgBack">Back</button></div>`;
+    ${M&&M.tracks.length>1?`<div class="meta">Parts to play:</div><div class="tracks">${M.tracks.map(t=>`<label><input type="checkbox" data-t="${t.index}"${M.on.includes(t.index)?' checked':''}> ${esc(t.name)} <small>(${t.count})</small></label>`).join('')}</div>`:''}
+    <div class="btns"><button class="primary" id="sgStart">▶ Start</button><button id="sgListen">👂 Listen</button><button id="sgTrain">⚡ Speed trainer</button><button id="sgBack">Back</button>${M?'<button id="sgDel" class="danger">Remove</button>':''}</div>`;
   const seg=(id,key,get,set)=>{ const el=$(id); if(!el) return; const sync=()=>el.querySelectorAll('button').forEach(b=>b.classList.toggle('on',b.dataset[key]===get())); el.querySelectorAll('button').forEach(b=>b.onclick=()=>{ set(b.dataset[key]); sync(); }); sync(); };
   seg('#sgHands','h',()=>hands,setHands);
   seg('#sgMode','m',()=>prog.settings.songMode||'wait',m=>{ prog.settings.songMode=m; saveProg(); });
@@ -1064,7 +1085,137 @@ async function showSong(e){
   $('#sgListen').onclick=()=>startSong(e,true);
   $('#sgTrain').onclick=()=>startTrainer(songItem(e));
   $('#sgBack').onclick=()=>{ $('#intro').hidden=true; };
+  if(M){
+    $('#sgTitle').onchange=ev=>{ const t=ev.target.value.trim(); if(!t) return; M.title=e.title=e.def.title=t; saveMySong(M); renderSongList(); };
+    card.querySelectorAll('.tracks input').forEach(cb=>cb.onchange=()=>{
+      const on=[...card.querySelectorAll('.tracks input:checked')].map(x=>+x.dataset.t);
+      if(!on.length){ cb.checked=true; return; }
+      M.on=on; e.def=null; saveMySong(M); showSong(e);
+    });
+    $('#sgDel').onclick=async()=>{
+      if(!confirm(`Remove “${e.title}” from My songs on this device?`)) return;
+      await deleteMySong(M.id); mySongs.splice(mySongs.indexOf(M),1); myMap.delete(M.id);
+      $('#intro').hidden=true; renderSongs(); toast('Removed '+e.title);
+    };
+  }
   $('#intro').hidden=false;
+}
+
+/* ---------- My songs: MIDI / MusicXML files imported on this device (IndexedDB), shared by all players ---------- */
+let idb=null, mySongs=null;
+const myMap=new Map();
+function openDB(){
+  return idb || (idb=new Promise((res,rej)=>{
+    const r=indexedDB.open('keys',1);
+    r.onupgradeneeded=()=>r.result.createObjectStore('mysongs',{keyPath:'id'});
+    r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error);
+  }));
+}
+async function dbDo(rw,fn){ const d=await openDB(); return new Promise((res,rej)=>{ const tx=d.transaction('mysongs',rw?'readwrite':'readonly'), q=fn(tx.objectStore('mysongs')); tx.oncomplete=()=>res(q.result); tx.onerror=()=>rej(tx.error); }); }
+async function loadMySongs(){
+  if(!mySongs){ try{ mySongs=await dbDo(false,st=>st.getAll()); }catch(e){ mySongs=[]; } mySongs.sort((a,b)=>a.added-b.added); }
+  return mySongs;
+}
+const saveMySong=r=>dbDo(true,st=>st.put(r)).catch(()=>toast('⚠ Could not save on this device'));
+const deleteMySong=id=>dbDo(true,st=>st.delete(id));
+const songCats=()=>Object.assign(mySongs&&mySongs.length?{mine:'📁 My songs'}:{}, SONG_CATS);
+function myEntries(){
+  return (mySongs||[]).map(r=>myMap.get(r.id) || myMap.set(r.id,{id:'my:'+r.id, title:r.title, by:r.by||r.file, cat:'mine', level:0, mine:r}).get(r.id));
+}
+function handsFor(r){   // which hand plays each note of an imported song
+  const on=new Set(r.on), ns=r.notes.filter(n=>on.has(n.track)).map(n=>({...n}));
+  if(ns.some(n=>n.staff)) ns.forEach(n=>{ if(n.staff) n.hand=n.staff>1?'L':'R'; });   // MusicXML piano staves
+  else if(on.size===2){   // two parts: the higher one is the right hand
+    const avg=t=>{ const m=ns.filter(n=>n.track===t); return m.reduce((a,n)=>a+n.midi,0)/m.length; }, [a,b]=[...on], hi=avg(a)>=avg(b)?a:b;
+    ns.forEach(n=>n.hand=n.track===hi?'R':'L');
+  }
+  return ns;   // otherwise notes split at middle C
+}
+const meterOf=(ts,q)=> !ts ? {meter:4, beat:q} : ts.d===8 && ts.n%3===0 ? {meter:ts.n/3, beat:q*1.5} : {meter:ts.n, beat:q*4/ts.d};
+
+async function importFiles(files){
+  await loadMySongs(); const added=[];
+  for(const f of files){
+    try{
+      const buf=await f.arrayBuffer(), b=new Uint8Array(buf,0,4), sig=String.fromCharCode(...b);
+      const p = sig==='MThd' ? parseMidiFile(buf) : parseMusicXML(sig==='PK\x03\x04' ? await unzipMusicXML(buf) : new TextDecoder().decode(buf));
+      if(!p.notes.length) throw new Error('no notes found');
+      const r={id:Date.now().toString(36)+Math.random().toString(36).slice(2,6), title:p.title||f.name.replace(/\.[^.]+$/,''), by:p.by||'', file:f.name, added:Date.now(),
+               tracks:p.tracks, on:p.tracks.map(t=>t.index), notes:p.notes, ...meterOf(p.ts,p.beat)};
+      await dbDo(true,st=>st.put(r)); mySongs.push(r); added.push(r);
+    }catch(err){ alert(`Could not add ${f.name}: ${err.message}`); }
+  }
+  if(!added.length) return;
+  toast(`📁 Added ${added.length} song${added.length>1?'s':''} to My songs`);
+  songQ=''; songLvl=0; songCat='mine'; openScreen('songs');
+  if(added.length===1) showSong(songById('my:'+added[0].id));
+}
+
+/* MusicXML (partwise): staves give the hands, <fingering> the finger numbers. Repeats are played as written once. */
+function parseMusicXML(text){
+  const x=new DOMParser().parseFromString(text,'application/xml'), root=x.documentElement;
+  if(x.querySelector('parsererror') || !/^score-/.test(root.nodeName)) throw new Error('not a MusicXML file');
+  if(root.nodeName!=='score-partwise') throw new Error('only "partwise" MusicXML is supported');
+  const kid=(el,name)=>[...el.children].find(c=>c.nodeName===name), num=(el,name,d=0)=>{ const c=el&&kid(el,name); return c?+c.textContent:d; };
+  const names={}; x.querySelectorAll('part-list score-part').forEach(sp=>{ const n=sp.querySelector('part-name'); names[sp.id]=(n&&n.textContent.trim())||''; });
+  const PC={C:0,D:2,E:4,F:5,G:7,A:9,B:11}, UNIT={whole:4,half:2,quarter:1,eighth:.5,'16th':.25};
+  const tempos=[], raw=[], tracks=[]; let ts=null;
+  [...root.children].filter(c=>c.nodeName==='part').forEach((part,ti)=>{
+    let div=1, t=0, last=0, count=0; const open={};
+    for(const m of part.children) if(m.nodeName==='measure') for(const el of m.children){
+      const nn=el.nodeName;
+      if(nn==='attributes'){ const d=kid(el,'divisions'); if(d) div=+d.textContent; const tm=kid(el,'time'); if(tm && !ts && kid(tm,'beats')) ts={n:parseInt(kid(tm,'beats').textContent), d:num(tm,'beat-type',4)}; }
+      else if(nn==='direction' || nn==='sound'){
+        const snd=nn==='sound'?el:el.querySelector('sound'), mt=el.querySelector('metronome');
+        if(snd && snd.getAttribute('tempo')) tempos.push({q:t, bpm:+snd.getAttribute('tempo')});
+        else if(mt && mt.querySelector('per-minute')){ const u=UNIT[(mt.querySelector('beat-unit')||{}).textContent]||1; tempos.push({q:t, bpm:parseFloat(mt.querySelector('per-minute').textContent)*u*(mt.querySelector('beat-unit-dot')?1.5:1)}); }
+      }
+      else if(nn==='backup') t-=num(el,'duration')/div;
+      else if(nn==='forward') t+=num(el,'duration')/div;
+      else if(nn==='note'){
+        if(kid(el,'grace')) continue;
+        const d=num(el,'duration')/div, start=kid(el,'chord')?last:t;
+        if(!kid(el,'chord')){ last=t; t+=d; }
+        const pt=kid(el,'pitch'); if(!pt) continue;   // rest or unpitched
+        const midi=(num(pt,'octave')+1)*12 + PC[kid(pt,'step').textContent.trim()] + Math.round(num(pt,'alter'));
+        const ties=[...el.children].filter(c=>c.nodeName==='tie').map(c=>c.getAttribute('type'));
+        if(ties.includes('stop') && open[midi]){ open[midi].e=start+d; if(!ties.includes('start')) delete open[midi]; continue; }
+        const fg=el.querySelector('notations technical fingering'), n={track:ti, midi, s:start, e:start+d, staff:num(el,'staff')||undefined, finger:fg?(parseInt(fg.textContent)||undefined):undefined};
+        raw.push(n); count++;
+        if(ties.includes('start')) open[midi]=n;
+      }
+    }
+    tracks.push({index:ti, name:names[part.id]||'Part '+(ti+1), count});
+  });
+  // song position (in quarter notes) -> seconds, following tempo changes
+  const tl=tempos.filter(x=>x.bpm>0).sort((a,b)=>a.q-b.q);
+  if(!tl.length || tl[0].q>0) tl.unshift({q:0, bpm:tl.length?tl[0].bpm:100});
+  let acc=0; tl.forEach((x,i)=>{ if(i) acc+=(x.q-tl[i-1].q)*60/tl[i-1].bpm; x.sec=acc; });
+  const sec=q=>{ let s=tl[0]; for(const x of tl){ if(x.q<=q) s=x; else break; } return s.sec+(q-s.q)*60/s.bpm; };
+  let notes=raw.map(n=>({track:n.track, midi:n.midi, staff:n.staff, finger:n.finger, start:sec(n.s), dur:Math.max(0.06,sec(n.e)-sec(n.s)-0.02)}));
+  const first=notes.length?Math.min(...notes.map(n=>n.start)):0; notes.forEach(n=>n.start-=first);
+  const txt=sel=>{ const e=x.querySelector(sel); return e?e.textContent.trim():''; };
+  return {title:txt('work work-title')||txt('movement-title'), by:txt('identification creator[type="composer"]'), tracks:tracks.filter(t=>t.count), notes, beat:60/tl[0].bpm, ts};
+}
+async function unzipMusicXML(buf){   // .mxl is a zip: find the score named in META-INF/container.xml
+  const v=new DataView(buf), u8=new Uint8Array(buf), dec=new TextDecoder(), files={};
+  let e=buf.byteLength-22; while(e>=0 && v.getUint32(e,true)!==0x06054b50) e--;
+  if(e<0) throw new Error('not a valid .mxl file');
+  for(let i=0, p=v.getUint32(e+16,true), n=v.getUint16(e+10,true); i<n; i++){
+    const nl=v.getUint16(p+28,true);
+    files[dec.decode(u8.subarray(p+46,p+46+nl))]={method:v.getUint16(p+10,true), size:v.getUint32(p+20,true), off:v.getUint32(p+42,true)};
+    p+=46+nl+v.getUint16(p+30,true)+v.getUint16(p+32,true);
+  }
+  const read=async name=>{
+    const f=files[name]; if(!f) throw new Error('missing '+name);
+    const at=f.off+30+v.getUint16(f.off+26,true)+v.getUint16(f.off+28,true), data=u8.subarray(at,at+f.size);
+    if(f.method===0) return dec.decode(data);
+    if(f.method!==8) throw new Error('unsupported compression');
+    return new Response(new Blob([data]).stream().pipeThrough(new DecompressionStream('deflate-raw'))).text();
+  };
+  let main=Object.keys(files).find(k=>!k.startsWith('META-INF') && /\.(musicxml|xml)$/i.test(k));
+  if(files['META-INF/container.xml']){ const rf=new DOMParser().parseFromString(await read('META-INF/container.xml'),'application/xml').querySelector('rootfile'); if(rf) main=rf.getAttribute('full-path'); }
+  return read(main);
 }
 
 function renderPractice(){
@@ -1091,7 +1242,7 @@ function renderPractice(){
       <select id="trSel" style="width:100%;margin-bottom:8px">${learnable.map(l=>`<option value="l:${l.id}">${l.course.icon} ${esc(l.title)}</option>`).join('')}${(self.SONGS||[]).map(s=>`<option value="s:${s.id}">🎵 ${esc(s.title)}</option>`).join('')}</select>
       <div class="chips"><span class="muted" style="align-self:center">Start at</span><select id="trStart">${[0.4,0.5,0.6,0.7].map(s=>`<option value="${s}"${s===0.5?' selected':''}>${s*100}%</option>`).join('')}</select><span class="muted" style="align-self:center">goal</span><select id="trGoal">${[0.8,0.9,1,1.1,1.25].map(s=>`<option value="${s}"${s===1?' selected':''}>${Math.round(s*100)}%</option>`).join('')}</select></div>
       <button class="primary" id="trGo">⚡ Start</button></div>
-    <div class="box"><h3>🎵 Songs</h3><p>Browse the song library or open your own MIDI file, with the hand, speed and metronome options.</p><button id="songs">Browse songs</button></div>
+    <div class="box"><h3>🎵 Songs</h3><p>Browse the song library, or add your own MIDI and MusicXML files to My songs.</p><button id="songs">Browse songs</button></div>
   </div>`;
   bind('#lens button',el=>{ prog.settings.sessionMin=+el.dataset.m; saveProg(); renderPractice(); });
   bind('#startMix',()=>startSession(prog.settings.sessionMin||10));
