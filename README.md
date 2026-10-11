@@ -31,7 +31,7 @@ Connect the piano with a USB-OTG cable and allow MIDI access.
 - **🏠 Home:** level & XP, day streak, daily-goal ring, *Today's practice*, continue learning, review.
 - **🎓 Lessons:** 48 lessons in 6 courses: Basics, Rhythm, Chords, Scales & keys, Two hands, Songs.
   Pass with 80% (★ 80, ★★ 90, ★★★ 97). Chord lessons require all chord keys held together.
-- **🎵 Songs:** 35 public-domain pieces (children's songs, folk & hymns, holiday, classical), with search and
+- **🎵 Songs:** 65 public-domain pieces (children's songs, folk & hymns, holiday, classical — including 30 piano originals from the Mutopia Project), with search and
   filters by level and category. Each has right- and left-hand parts; pick hands, Wait or Play along, Listen,
   or the speed trainer. Your best score is saved per song. Also links to the song lessons and opens your own `.mid` files.
 - **🏋 Practice**
@@ -66,7 +66,9 @@ that both hands line up). `bpm` counts the notation's beat unit; for 6/8 or fast
 `pulse` (units per metronome click), e.g. `bpm:180, meter:2, pulse:3`. `level` is 1–3; `cat` is a key of `SONG_CATS`.
 
 **MIDI files:** put them in a `midi/` folder and add `{id, title, by, cat, level, mid:'midi/name.mid'}`. They are
-fetched only when opened and cached for offline use by the service worker. Hands are split at middle C (set `split` to change).
+fetched only when opened and cached for offline use by the service worker. Hands are split at middle C (set `split` to change), or
+set `hands:'tracks'` when the file has one track per staff (as Mutopia files do) so the upper staff is the right hand.
+The metronome clicks quarter notes; for other beat units set `pulse` in quarters, e.g. `meter:2, pulse:1.5` for 6/8.
 Only add files you are allowed to share: the composition being old is not enough, since a MIDI sequence can have its
 own copyright (Mutopia Project files marked Public Domain are safe).
 

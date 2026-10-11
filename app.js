@@ -986,7 +986,12 @@ async function songDef(e){   // notes are parsed (or the MIDI file fetched) the 
   if(e.mid){
     const r=await fetch(e.mid); if(!r.ok) throw new Error('Could not load '+e.mid);
     const p=parseMidiFile(await r.arrayBuffer());
-    d={notes:p.notes, beat:p.beat, split:e.split, meter:e.meter};
+    if(e.hands==='tracks'){   // one track per staff (e.g. Mutopia files): the track with the higher average pitch is the right hand
+      const avg=t=>{ const m=p.notes.filter(n=>n.track===t.index); return m.reduce((s,n)=>s+n.midi,0)/m.length; };
+      const rt=p.tracks.reduce((a,b)=>avg(b)>avg(a)?b:a).index;
+      p.notes.forEach(n=>n.hand=n.track===rt?'R':'L');
+    }
+    d={notes:p.notes, beat:p.beat*(e.pulse||1), split:e.split, meter:e.meter};
   } else d={bpm:e.bpm, meter:e.meter, pulse:e.pulse, split:e.split, rh:e.rh, lh:e.lh};
   d.title=e.title;
   return e.def=prep(d);

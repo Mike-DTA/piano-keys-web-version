@@ -155,5 +155,37 @@ self.SONGS = [
 {id:'mozart-40', title:'Symphony No. 40 (theme)', by:'W. A. Mozart, 1788', cat:'classical', level:3, bpm:112,
  rh:'Eb5:.5 D5:.5 | D5 Eb5:.5 D5:.5 D5 Eb5:.5 D5:.5 | D5 Bb5 R Bb5:.5 A5:.5 | G5 G5:.5 F5:.5 Eb5 Eb5:.5 D5:.5 | C5 C5 R D5:.5 C5:.5 | C5 D5:.5 C5:.5 C5 D5:.5 C5:.5 | C5 A5 R A5:.5 G5:.5 | F#5 F#5:.5 Eb5:.5 D5 D5:.5 C5:.5 | Bb4 Bb4 R',
  lh:'R:1 | G2:4 | G2:4 | C3:4 | D3:4 | D3:4 | D3:4 | D3:4 | G2:3'},
+/* ---- Piano repertoire from the Mutopia Project (mutopiaproject.org), MIDI files licensed Public Domain ----
+ hands:'tracks' — each file has one track per staff, so hands follow the score rather than a split point */
+{id:'bach-minuet-a-minor', title:'Minuet in A minor (BWV Anh. 120)', by:'J. S. Bach, 1725', cat:'classical', level:1, meter:3, hands:'tracks', mid:'midi/bach-minuet-a-minor.mid'},   // Mutopia #1612, Public Domain
+{id:'bach-minuet-c-minor', title:'Minuet in C minor (BWV Anh. 121)', by:'J. S. Bach, 1725', cat:'classical', level:1, meter:3, hands:'tracks', mid:'midi/bach-minuet-c-minor.mid'},   // Mutopia #1613, Public Domain
+{id:'bach-minuet-b-flat', title:'Minuet in B♭ (BWV Anh. 118)', by:'J. S. Bach, 1725', cat:'classical', level:1, meter:3, hands:'tracks', mid:'midi/bach-minuet-b-flat.mid'},   // Mutopia #1014, Public Domain
+{id:'bach-polonaise-f', title:'Polonaise in F (BWV Anh. 117a)', by:'J. S. Bach, 1725', cat:'classical', level:1, meter:3, hands:'tracks', mid:'midi/bach-polonaise-f.mid'},   // Mutopia #1013, Public Domain
+{id:'bach-polonaise-d-minor', title:'Polonaise in D minor (BWV Anh. 128)', by:'J. S. Bach, 1725', cat:'classical', level:1, meter:3, hands:'tracks', mid:'midi/bach-polonaise-d-minor.mid'},   // Mutopia #1615, Public Domain
+{id:'bach-march-e-flat', title:'March in E♭ (BWV Anh. 127)', by:'J. S. Bach, 1725', cat:'classical', level:1, meter:2, pulse:2, hands:'tracks', mid:'midi/bach-march-e-flat.mid'},   // Mutopia #1614, Public Domain
+{id:'burgmuller-la-candeur', title:'La Candeur (Op. 100 No. 1)', by:'Friedrich Burgmüller, 1851', cat:'classical', level:1, meter:4, hands:'tracks', mid:'midi/burgmuller-la-candeur.mid'},   // Mutopia #202, Public Domain
+{id:'burgmuller-la-pastorale', title:'La Pastorale (Op. 100 No. 3)', by:'Friedrich Burgmüller, 1851', cat:'classical', level:1, meter:2, pulse:1.5, hands:'tracks', mid:'midi/burgmuller-la-pastorale.mid'},   // Mutopia #218, Public Domain
+{id:'czerny-op840-1', title:'Melodic Study (Op. 840 No. 1)', by:'Carl Czerny, c. 1845', cat:'classical', level:1, meter:4, hands:'tracks', mid:'midi/czerny-op840-1.mid'},   // Mutopia #2146, Public Domain
+{id:'chopin-prelude-7', title:'Prelude in A (Op. 28 No. 7)', by:'Frédéric Chopin, 1839', cat:'classical', level:1, meter:3, hands:'tracks', mid:'midi/chopin-prelude-7.mid'},   // Mutopia #470, Public Domain
+{id:'tchaikovsky-old-french-song', title:'Old French Song (Op. 39 No. 16)', by:'Pyotr Ilyich Tchaikovsky, 1878', cat:'classical', level:2, meter:2, hands:'tracks', mid:'midi/tchaikovsky-old-french-song.mid'},   // Mutopia #2080, Public Domain
+{id:'tchaikovsky-morning-prayer', title:'Morning Prayer (Op. 39 No. 1)', by:'Pyotr Ilyich Tchaikovsky, 1878', cat:'classical', level:2, meter:3, hands:'tracks', mid:'midi/tchaikovsky-morning-prayer.mid'},   // Mutopia #2032, Public Domain
+{id:'tchaikovsky-wooden-soldiers', title:'March of the Wooden Soldiers (Op. 39 No. 5)', by:'Pyotr Ilyich Tchaikovsky, 1878', cat:'classical', level:2, meter:2, hands:'tracks', mid:'midi/tchaikovsky-wooden-soldiers.mid'},   // Mutopia #1806, Public Domain
+{id:'burgmuller-arabesque', title:'L\'Arabesque (Op. 100 No. 2)', by:'Friedrich Burgmüller, 1851', cat:'classical', level:2, meter:2, hands:'tracks', mid:'midi/burgmuller-arabesque.mid'},   // Mutopia #203, Public Domain
+{id:'burgmuller-tendre-fleur', title:'Tendre Fleur (Op. 100 No. 10)', by:'Friedrich Burgmüller, 1851', cat:'classical', level:2, meter:4, hands:'tracks', mid:'midi/burgmuller-tendre-fleur.mid'},   // Mutopia #221, Public Domain
+{id:'handel-sonatina', title:'Sonatina in B♭ (HWV 585)', by:'George Frideric Handel, c. 1710', cat:'classical', level:2, meter:4, hands:'tracks', mid:'midi/handel-sonatina-b-flat.mid'},   // Mutopia #98, Public Domain
+{id:'gymnopedie-1', title:'Gymnopédie No. 1', by:'Erik Satie, 1888', cat:'classical', level:2, meter:3, hands:'tracks', mid:'midi/satie-gymnopedie-1.mid'},   // Mutopia #37, Public Domain
+{id:'traumerei', title:'Träumerei (Kinderszenen)', by:'Robert Schumann, 1838', cat:'classical', level:2, meter:4, hands:'tracks', mid:'midi/schumann-traumerei.mid'},   // Mutopia #504, Public Domain
+{id:'chopin-prelude-4', title:'Prelude in E minor (Op. 28 No. 4)', by:'Frédéric Chopin, 1839', cat:'classical', level:2, meter:2, pulse:2, hands:'tracks', mid:'midi/chopin-prelude-4.mid'},   // Mutopia #468, Public Domain
+{id:'chopin-prelude-6', title:'Prelude in B minor (Op. 28 No. 6)', by:'Frédéric Chopin, 1839', cat:'classical', level:2, meter:3, hands:'tracks', mid:'midi/chopin-prelude-6.mid'},   // Mutopia #469, Public Domain
+{id:'chopin-prelude-20', title:'Prelude in C minor (Op. 28 No. 20)', by:'Frédéric Chopin, 1839', cat:'classical', level:2, meter:4, hands:'tracks', mid:'midi/chopin-prelude-20.mid'},   // Mutopia #472, Public Domain
+{id:'kuhlau-sonatina', title:'Sonatina in C, 1st movement (Op. 20 No. 1)', by:'Friedrich Kuhlau, 1820', cat:'classical', level:2, meter:4, hands:'tracks', mid:'midi/kuhlau-sonatina-op20-1.mid'},   // Mutopia #232, Public Domain
+{id:'beethoven-menuett', title:'Minuet in C (WoO 82)', by:'Ludwig van Beethoven, 1805', cat:'classical', level:2, meter:3, hands:'tracks', mid:'midi/beethoven-menuett-woo82.mid'},   // Mutopia #904, Public Domain
+{id:'moment-musical-3', title:'Moment Musical No. 3 (D. 780)', by:'Franz Schubert, 1823', cat:'classical', level:2, meter:2, hands:'tracks', mid:'midi/schubert-moment-musical-3.mid'},   // Mutopia #1023, Public Domain
+{id:'fur-elise-full', title:'Für Elise (complete)', by:'Ludwig van Beethoven, 1810', cat:'classical', level:3, meter:3, pulse:0.5, hands:'tracks', mid:'midi/beethoven-fur-elise.mid'},   // Mutopia #931, Public Domain
+{id:'rondo-alla-turca', title:'Rondo alla Turca (K. 331)', by:'W. A. Mozart, 1783', cat:'classical', level:3, meter:2, hands:'tracks', mid:'midi/mozart-rondo-alla-turca.mid'},   // Mutopia #108, Public Domain
+{id:'the-entertainer', title:'The Entertainer', by:'Scott Joplin, 1902', cat:'classical', level:3, meter:2, hands:'tracks', mid:'midi/joplin-entertainer.mid'},   // Mutopia #263, Public Domain
+{id:'maple-leaf-rag', title:'Maple Leaf Rag', by:'Scott Joplin, 1899', cat:'classical', level:3, meter:2, hands:'tracks', mid:'midi/joplin-maple-leaf-rag.mid'},   // Mutopia #23, Public Domain
+{id:'clair-de-lune', title:'Clair de Lune (Suite bergamasque)', by:'Claude Debussy, 1890', cat:'classical', level:3, meter:3, pulse:1.5, hands:'tracks', mid:'midi/debussy-clair-de-lune.mid'},   // Mutopia #1778, Public Domain
+{id:'debussy-arabesque-1', title:'Arabesque No. 1', by:'Claude Debussy, 1888', cat:'classical', level:3, meter:4, hands:'tracks', mid:'midi/debussy-arabesque-1.mid'},   // Mutopia #1777, Public Domain
 ];
 })();
