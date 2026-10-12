@@ -1137,19 +1137,31 @@ function startReview(){
   startSession(Math.max(5,Math.round(est/60)), null, items, '↻ Review session');
 }
 
+const lessonHay=l=>l._hay || (l._hay=[l.title, l.course.title, l.course.sub, ...l.text, l.tip, ...(l.learn||[]), ...(l.practice||[]), ...(l.watch||[]), ...l.skills.map(k=>SKILLS[k])].join(' '));
 function renderLearn(){
-  const nx=nextInPath();
-  B.innerHTML=`<div class="grid">${COURSES.map(c=>{
+  B.innerHTML=`<input id="lq" class="search" type="search" placeholder="Search ${ALL_LESSONS.length} lessons: a title or a topic, like chords, waltz or F sharp" value="${esc(lessonQ)}" autocomplete="off"><div id="llist"></div>`;
+  $('#lq').oninput=e=>{ lessonQ=e.target.value; renderLessonList(); };
+  renderLessonList();
+}
+function renderLessonList(){
+  const nx=nextInPath(), q=lessonQ.trim();
+  const courses=COURSES.map(c=>({c, ls:c.lessons.filter(l=>matches(lessonHay(l),q))})).filter(x=>x.ls.length);
+  $('#llist').innerHTML = !courses.length ? '<p class="muted">No lessons match that search.</p>' : `<div class="grid">${courses.map(({c,ls})=>{
     const done=c.lessons.filter(l=>passed(l.id)).length;
-    return `<section class="box course"><h3>${c.icon} ${c.title}</h3><div class="sub">${c.sub} · ${done}/${c.lessons.length}</div><div class="bar"><i style="width:${100*done/c.lessons.length}%"></i></div>
-      ${c.lessons.map((l,i)=>{ const b=best(l.id), ok=b>=PASS, due=dueness(l.id)>=1;
+    return `<section class="box course"><h3>${c.icon} ${c.title}</h3><div class="sub">${c.sub} · ${done}/${c.lessons.length}${q?` · ${ls.length} found`:''}</div><div class="bar"><i style="width:${100*done/c.lessons.length}%"></i></div>
+      ${ls.map(l=>{ const i=l.idx, b=best(l.id), ok=b>=PASS, due=dueness(l.id)>=1;
         return `<button class="lesson${ok?' done':''}${l===nx?' next':''}" data-id="${l.id}"><span class="num">${ok?'✓':i+1}</span><span class="t">${esc(l.title)}</span>${due?'<span class="due" title="Ready for review">↻</span>':''}${ok?`<span class="s">${starStr(starsFor(b))}</span>`:''}</button>`; }).join('')}
     </section>`; }).join('')}</div>`;
-  bind('.lesson',el=>showIntro(LESSON[el.dataset.id]));
+  $('#llist').querySelectorAll('.lesson').forEach(el=>el.onclick=()=>showIntro(LESSON[el.dataset.id]));
 }
 
 /* ---------- Song library ---------- */
-let libP=null, songQ='', songLvl=0, songCat='';
+let libP=null, songQ='', songLvl=0, songCat='', catQ={}, lessonQ='';
+/* Search: case and accents don't matter (fur elise = Für Elise), words can come in any order, ♯/♭ also match "sharp"/"flat" */
+const norm=s=>String(s||'').replace(/<[^>]*>/g,' ').replace(/♯/g,'# sharp ').replace(/♭/g,'♭ flat ').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+const normQ=q=>norm(String(q||'').replace(/\b([a-g])\s*(?:sharp|#|♯)/gi,'$1#').replace(/\b([a-g])\s*(?:flat|♭)/gi,'$1♭'));   // "F sharp" = "F#" = "F♯"
+function matches(hay,q){ const words=normQ(q).split(/\s+/).filter(Boolean); if(!words.length) return true; const h=norm(hay); return words.every(w=>h.includes(w)); }
+const songHay=s=>[s.title, s.by, songCats()[s.cat], LEVELS[s.level], s.mine&&s.mine.file, ...marksFor(s.id).map(m=>m.label)].join(' ');
 const LEVELS={1:'Easy', 2:'Medium', 3:'Harder'}, dots=n=>'●'.repeat(n)+'○'.repeat(3-n);
 function loadLibrary(){   // songs.js is only fetched when needed (or once the app is idle)
   return libP || (libP=new Promise((res,rej)=>{
@@ -1196,7 +1208,7 @@ function renderSongs(){
   const songCourse=LESSON.p1.course;
   if(songCat==='mine' && !mine.length) songCat='';
   B.innerHTML=`${!mySongs && (dbWaiting || localGaveUp) ? '<p class="notice">⚠ My songs and recordings can\'t open yet. This usually means Keys is also open in another tab or as the installed app, with an older version. Close that and they\'ll appear here.</p>' : ''}
-  <input id="sq" class="search" type="search" placeholder="Search ${SONGS.length+mine.length} songs or composers" value="${esc(songQ)}" autocomplete="off">
+  <input id="sq" class="search" type="search" placeholder="Search ${SONGS.length+mine.length} songs, composers or saved parts" value="${esc(songQ)}" autocomplete="off">
   <div class="chips" id="slv">${[0,1,2,3].map(k=>`<button data-l="${k}" class="${k===songLvl?'on':''}">${k?dots(k)+' '+LEVELS[k]:'All levels'}</button>`).join('')}</div>
   <div class="chips" id="sct"><button data-c="" class="${songCat?'':'on'}">All</button>${Object.entries(songCats()).map(([k,l])=>`<button data-c="${k}" class="${k===songCat?'on':''}">${l}</button>`).join('')}</div>
   ${savedPartsHTML()}
@@ -1224,15 +1236,25 @@ function savedPartsHTML(){   // every saved part of this player, in songs and le
   const all=Object.keys(prog.marks).flatMap(k=>{ const title=markTitle(k); return title ? prog.marks[k].map((m,i)=>({k,i,m,title})) : []; });
   return all.length ? `<h2 class="sec">🔖 Your saved parts</h2><div class="marks">${all.map(x=>`<button class="mk" data-k="${esc(x.k)}" data-i="${x.i}">▶ ${esc(x.title)} · <b>${esc(x.m.label)}</b> <small class="muted">${fmtTime(x.m.t)}</small></button>`).join('')}</div>` : '';
 }
+let songBase=[];
 function renderSongList(){
-  const q=songQ.trim().toLowerCase();
-  const list=[...myEntries(), ...SONGS].filter(s=>(!songLvl||s.level===songLvl) && (!songCat||s.cat===songCat) && (!q||(s.title+' '+s.by).toLowerCase().includes(q)));
+  songBase=[...myEntries(), ...SONGS].filter(s=>(!songLvl||s.level===songLvl) && (!songCat||s.cat===songCat) && matches(songHay(s),songQ));
+  const cats=Object.entries(songCats()).filter(([c])=>songBase.some(s=>s.cat===c));
+  $('#slist').innerHTML = !songBase.length ? '<p class="muted">No songs match your search.</p>' :
+    cats.map(([c,label])=>`<div class="sechead"><h2 class="sec">${label} <span class="muted" id="sn-${c}"></span></h2>`+
+      `<input class="search catq" type="search" data-c="${c}" placeholder="Search ${esc(label.replace(/^\S+\s/,'').toLowerCase())}" value="${esc(catQ[c]||'')}" autocomplete="off" aria-label="Search ${esc(label)}"></div><div class="songs" id="sl-${c}"></div>`).join('');
+  for(const [c] of cats) fillCat(c);
+  $('#slist').querySelectorAll('.catq').forEach(el=>el.oninput=()=>{ catQ[el.dataset.c]=el.value; fillCat(el.dataset.c); });
+}
+function fillCat(c){   // one category section, filtered by its own search box
+  const all=songBase.filter(s=>s.cat===c), ss=all.filter(s=>matches(songHay(s),catQ[c]||''));
   const row=s=>{ const r=prog.songs[s.id];
     return `<button class="song" data-id="${s.id}"><span class="t"><b>${esc(s.title)}</b><small>${esc(s.by)}</small></span>
       ${r&&r.best?`<span class="s" title="Your best">${starStr(starsFor(r.best))}<small>${r.best}%</small></span>`:''}${s.level?`<span class="lvl" title="${LEVELS[s.level]}">${dots(s.level)}</span>`:''}</button>`; };
-  $('#slist').innerHTML = !list.length ? '<p class="muted">No songs match your search.</p>' :
-    Object.entries(songCats()).map(([c,label])=>{ const ss=list.filter(s=>s.cat===c); return ss.length ? `<h2 class="sec">${label} <span class="muted">· ${ss.length}</span></h2><div class="songs">${ss.map(row).join('')}</div>` : ''; }).join('');
-  $('#slist').querySelectorAll('.song').forEach(el=>el.onclick=()=>showSong(songById(el.dataset.id)));
+  $('#sn-'+c).textContent = ss.length<all.length ? `· ${ss.length} of ${all.length}` : `· ${all.length}`;
+  const box=$('#sl-'+c);
+  box.innerHTML = ss.length ? ss.map(row).join('') : '<p class="muted">No songs here match that search.</p>';
+  box.querySelectorAll('.song').forEach(el=>el.onclick=()=>showSong(songById(el.dataset.id)));
 }
 async function showSong(e){
   let d; try{ d=await songDef(e); }catch(err){ return toast('⚠ '+err.message); }

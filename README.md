@@ -35,13 +35,14 @@ Connect the piano with a USB-OTG cable and allow MIDI access.
 - **🏠 Home:** level & XP, day streak, daily-goal ring, *Today's practice*, continue learning, review.
 - **🎓 Lessons:** 58 lessons in 7 courses: Basics, Rhythm, Chords, Scales & keys, Music theory, Two hands, Songs.
   Pass with 80% (★ 80, ★★ 90, ★★★ 97). Chord lessons require all chord keys held together.
+  The Lessons screen has a search that also looks inside the lessons, so topics like "waltz" or "F sharp" find them.
   Every lesson intro has **Learn more**: the theory behind it, how to practise, and common mistakes. Reopen it any time
   with **📖 Read lesson** on the result card or the book button in the top bar.
   The **📘 Music theory** course covers the musical alphabet, half/whole steps, intervals, building major scales,
   key signatures and the circle of fifths, how chords are built, Roman numerals, time signatures (6/8),
   the harmonic minor and cadences, each with an exercise.
 - **🎵 Songs:** 71 public-domain pieces (children's songs, folk & hymns, holiday, classical — including 30 piano originals from the Mutopia Project), with search and
-  filters by level and category. Each has right- and left-hand parts; pick hands, Wait or Play along, Listen,
+  filters by level and category, plus a search box per category. Each has right- and left-hand parts; pick hands, Wait or Play along, Listen,
   or the speed trainer. Your best score is saved per song. Also links to the song lessons and the pop chord drills.
 - **📁 My songs:** import your own MIDI (`.mid`) or MusicXML (`.musicxml`, `.xml`, `.mxl`) files, e.g. scores you've
   bought or downloaded from MuseScore. They're stored on the device (IndexedDB), shared by all players, with
@@ -69,6 +70,8 @@ Connect the piano with a USB-OTG cable and allow MIDI access.
 - **🔖 Saved parts:** save labelled spots in a song or lesson (per player), shown as ticks on the timeline. The 🔖
   button in the top bar opens a quick menu to jump to a part, loop it (until the next saved part), rename or
   delete it. All saved parts are listed on the Songs screen and on each song's card, to start right there.
+- **Search:** case and accents don't matter ("fur elise" finds Für Elise), words can be in any order, and
+  "F sharp", "F#" and "F♯" mean the same. Song searches also match composer, category, level and saved-part names.
 - **📊 Where you make mistakes:** every song card and lesson intro has a heatmap of the song, about one slice per bar,
   coloured by how many mistakes you make there (wrong keys, and missed notes in Play along). Recent plays count most,
   so parts you've fixed cool down. Tap a slice or one of the top trouble spots to loop that part. The heat also tints
