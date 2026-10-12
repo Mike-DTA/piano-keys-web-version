@@ -33,8 +33,13 @@ Connect the piano with a USB-OTG cable and allow MIDI access.
   *Who's playing?* (and asks again after 20 minutes away); switch any time from the name button in the menu
   or the avatar in the keyboard bar. Add, rename (with an avatar) or delete players there.
 - **🏠 Home:** level & XP, day streak, daily-goal ring, *Today's practice*, continue learning, review.
-- **🎓 Lessons:** 48 lessons in 6 courses: Basics, Rhythm, Chords, Scales & keys, Two hands, Songs.
+- **🎓 Lessons:** 58 lessons in 7 courses: Basics, Rhythm, Chords, Scales & keys, Music theory, Two hands, Songs.
   Pass with 80% (★ 80, ★★ 90, ★★★ 97). Chord lessons require all chord keys held together.
+  Every lesson intro has **Learn more**: the theory behind it, how to practise, and common mistakes. Reopen it any time
+  with **📖 Read lesson** on the result card or the book button in the top bar.
+  The **📘 Music theory** course covers the musical alphabet, half/whole steps, intervals, building major scales,
+  key signatures and the circle of fifths, how chords are built, Roman numerals, time signatures (6/8),
+  the harmonic minor and cadences, each with an exercise.
 - **🎵 Songs:** 71 public-domain pieces (children's songs, folk & hymns, holiday, classical — including 30 piano originals from the Mutopia Project), with search and
   filters by level and category. Each has right- and left-hand parts; pick hands, Wait or Play along, Listen,
   or the speed trainer. Your best score is saved per song. Also links to the song lessons and the pop chord drills.
@@ -119,7 +124,8 @@ function openInKeys(bytes, title){
 Passing the name `'keys'` reuses the same Keys tab for every song.
 
 ## Adding lessons
-Add an entry to a course in `COURSES` (content.js) and its id to `PATH`:
+Add an entry to a course in `COURSES` (content.js), its id to `PATH`, and its theory to `THEORY`
+(`{learn:[…], practice:[…], watch:[…]}`, shown under Learn more):
 ```
 {id, title, text:[...], tip, src, bpm, mode:'wait'|'play', together:true, metro:true, meter:3, split:60, skills:['chords']}
 ```

@@ -101,7 +101,7 @@ function parseMidiFile(buf){
 /* ---------- Content index ---------- */
 const ALL_LESSONS = COURSES.flatMap(c=>c.lessons.map((l,i)=>Object.assign(l,{course:c, idx:i})));
 const LESSON = Object.fromEntries(ALL_LESSONS.map(l=>[l.id,l]));
-ALL_LESSONS.forEach(prep);
+ALL_LESSONS.forEach(l=>{ Object.assign(l, THEORY[l.id]||{}); prep(l); });   // learn / practice / watch from content.js
 
 /* =====================================================================
    Progress store
@@ -542,6 +542,7 @@ function partialFinish(acc,res){
   setResult(`Practice from ${from}`, null, acc+'%', statLine()+'. Only full play-throughs from the start count toward stars and best scores.',
     [{label:`↺ From ${from} again`, primary:true, fn:()=>{ seekTo(at); togglePlay(); }},
      {label:'From the start', fn:()=>{ restart(); togglePlay(); }},
+     ...(cur&&cur.lesson ? [{label:'📖 Read lesson', fn:()=>showIntro(cur.lesson,cur,true)}] : []),
      {label:'Close', fn:closeResult}], {xp:res&&res.xp});
 }
 function freeFinish(acc,res){
@@ -564,6 +565,7 @@ function lessonFinish(acc,res){
   const nx=nextInPath(), btns=[];
   if(pass && counts && nx) btns.push({label:'Next lesson ▶',primary:true,fn:()=>showIntro(nx)});
   btns.push({label:'↺ Retry',primary:!(pass&&counts&&nx),fn:()=>startItem(cur,false)});
+  btns.push({label:'📖 Read lesson',fn:()=>showIntro(L,cur,true)});
   if(pass) btns.push({label:'⚡ Speed trainer',fn:()=>startTrainer(cur)});
   btns.push({label:'Lessons',fn:()=>openScreen('learn')});
   const title = pass&&counts ? (res.firstPass?'🎉 Lesson complete':(acc>res.prevBest?'🎉 New best!':'✓ Well played')) : (pass?'Nice practice!':'Almost there');
@@ -966,6 +968,7 @@ function updateUI(){
   $('#transport').classList.toggle('off', !notes.length && !rp);
   $('#tReplay').hidden=!rp; if(rp) $('#tReplay').innerHTML=`<span>🎙 Replay ✕</span>`;
   $('#recBtn').hidden=!!rp; updateRecBtn();
+  $('#lessonBtn').hidden=!(cur && cur.lesson) || !!rp;
   const lb=$('#tLoop'); lb.hidden=!loop; if(loop) lb.innerHTML=`${ICON.loop}<span>${esc(loop.label)} ✕</span>`;
   $('#msg').textContent = rp ? (rp.playing ? '' : 'Paused') : !notes.length ? (rec ? 'Recording… play freely, then press stop' : 'Play freely, or pick something from 🎵 Songs') : !playing && !finished && t<=-LEAD ? 'Press Start (or Space) when you\'re ready' : (!playing && !finished ? 'Paused' : '');
   updateHud();
@@ -1004,11 +1007,13 @@ const ICON={
                '<path d="M18.5 1.5v7M15 5h7" style="stroke:var(--panel2)" stroke-width="5"/><path d="M18.5 2v6M15.5 5h6" stroke-width="2.4"/>'),
   edit:  svg('<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/>'),
   del:   svg('<path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/>'),
+  book:  svg('<path d="M2 4.5h6a4 4 0 0 1 4 4V21a3 3 0 0 0-3-3H2z"/><path d="M22 4.5h-6a4 4 0 0 0-4 4V21a3 3 0 0 1 3-3h7z"/>'),
   rec:   svg('<circle cx="12" cy="12" r="6.5" fill="currentColor" stroke="none"/>'),
   stop:  svg('<rect x="6.5" y="6.5" width="11" height="11" rx="2" fill="currentColor" stroke="none"/>'),
   download: svg('<path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/>'),
   loop:  svg('<path d="m17 2 4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="m7 22-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/>'),
 };
+$('#lessonBtn').innerHTML=ICON.book; $('#lessonBtn').onclick=()=>{ if(cur&&cur.lesson) showIntro(cur.lesson,cur,true); };
 $('#tStart').innerHTML=ICON.start; $('#tBack').innerHTML=ICON.back5; $('#tFwd').innerHTML=ICON.fwd5; $('#tMark').innerHTML=ICON.markAdd; $('#marksBtn').innerHTML=ICON.mark;
 const pos=()=>rp ? rp.w : scrub ? scrub.target : t;   // where the timeline is (the replay has its own clock)
 $('#tStart').onclick=()=>seekAnimated(rp ? 0 : loop ? loopStart() : -LEAD);
@@ -1170,16 +1175,23 @@ async function songDef(e){   // notes are parsed (or the MIDI file fetched) the 
 const songItem=e=>({kind:'free', song:e, def:e.def, title:e.title, sub:'🎵 Song'});
 function startSong(e,listen){ session=null; trainer=null; e.def.mode=prog.settings.songMode||'wait'; startItem(songItem(e),listen); }
 
+let localWait=null, localGaveUp=false;
 function renderSongs(){
-  if(!self.SONGS || !mySongs || !recs){
+  if(self.SONGS && (!mySongs || !recs) && !localWait){   // My songs and recordings come from the on-device database
+    localWait=Promise.all([loadMySongs(), loadRecs()]).finally(()=>{ localWait=null; if(screenName==='songs') renderSongs(); });
+    setTimeout(()=>{ if(localWait){ localGaveUp=true; if(screenName==='songs') renderSongs(); } }, 2500);   // don't keep the library waiting
+  }
+  if(!self.SONGS || (localWait && !localGaveUp)){
     B.innerHTML='<p class="muted">Loading songs…</p>';
-    Promise.all([loadLibrary(), loadMySongs(), loadRecs()]).then(()=>{ if(screenName==='songs') renderSongs(); },
+    if(!self.SONGS) loadLibrary().then(()=>{ if(screenName==='songs') renderSongs(); },
       err=>{ if(screenName!=='songs') return; B.innerHTML=`<p class="muted">${esc(err.message)}. Check your connection.</p><button id="retry">Try again</button>`; bind('#retry',renderSongs); });
     return;
   }
+  const mine=mySongs||[];
   const songCourse=LESSON.p1.course;
-  if(songCat==='mine' && !mySongs.length) songCat='';
-  B.innerHTML=`<input id="sq" class="search" type="search" placeholder="Search ${SONGS.length+mySongs.length} songs or composers" value="${esc(songQ)}" autocomplete="off">
+  if(songCat==='mine' && !mine.length) songCat='';
+  B.innerHTML=`${!mySongs && (dbWaiting || localGaveUp) ? '<p class="notice">⚠ My songs and recordings can\'t open yet. This usually means Keys is also open in another tab or as the installed app, with an older version. Close that and they\'ll appear here.</p>' : ''}
+  <input id="sq" class="search" type="search" placeholder="Search ${SONGS.length+mine.length} songs or composers" value="${esc(songQ)}" autocomplete="off">
   <div class="chips" id="slv">${[0,1,2,3].map(k=>`<button data-l="${k}" class="${k===songLvl?'on':''}">${k?dots(k)+' '+LEVELS[k]:'All levels'}</button>`).join('')}</div>
   <div class="chips" id="sct"><button data-c="" class="${songCat?'':'on'}">All</button>${Object.entries(songCats()).map(([k,l])=>`<button data-c="${k}" class="${k===songCat?'on':''}">${l}</button>`).join('')}</div>
   ${savedPartsHTML()}
@@ -1254,19 +1266,26 @@ async function showSong(e){
 }
 
 /* ---------- My songs: MIDI / MusicXML files imported on this device (IndexedDB), shared by all players ---------- */
-let idb=null, mySongs=null;
+let idb=null, mySongs=null, dbWaiting=false;
 const myMap=new Map();
 function openDB(){
   return idb || (idb=new Promise((res,rej)=>{
     const r=indexedDB.open('keys',2);
     r.onupgradeneeded=()=>{ const d=r.result; for(const st of ['mysongs','recordings']) if(!d.objectStoreNames.contains(st)) d.createObjectStore(st,{keyPath:'id'}); };
-    r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error);
+    r.onsuccess=()=>{
+      const d=r.result; dbWaiting=false;
+      d.onversionchange=()=>{ d.close(); idb=null; };   // a newer Keys wants to upgrade: let it
+      res(d);
+      if(screenName==='songs' && (!mySongs || !recs)) renderSongs();   // it was blocked: show My songs and recordings now
+    };
+    r.onerror=()=>{ idb=null; rej(r.error); };
+    r.onblocked=()=>{ dbWaiting=true; if(screenName==='songs') renderSongs(); };   // an older Keys tab still has the database open
   }));
 }
 async function dbDo(rw,fn,store='mysongs'){ const d=await openDB(); return new Promise((res,rej)=>{ const tx=d.transaction(store,rw?'readwrite':'readonly'), q=fn(tx.objectStore(store)); tx.oncomplete=()=>res(q.result); tx.onerror=()=>rej(tx.error); }); }
 async function loadMySongs(){
   if(!mySongs){ try{ mySongs=await dbDo(false,st=>st.getAll()); }catch(e){ mySongs=[]; } mySongs.sort((a,b)=>a.added-b.added); }
-  return mySongs;
+  return mySongs;   // stays null while the database is blocked
 }
 const saveMySong=r=>dbDo(true,st=>st.put(r)).catch(()=>toast('⚠ Could not save on this device'));
 const deleteMySong=id=>dbDo(true,st=>st.delete(id));
@@ -1288,7 +1307,9 @@ const meterOf=(ts,q)=> !ts ? {meter:4, beat:q} : ts.d===8 && ts.n%3===0 ? {meter
 const hashBytes=u8=>{ let h=0x811c9dc5; for(let i=0;i<u8.length;i++){ h^=u8[i]; h=Math.imul(h,16777619); } return (h>>>0).toString(16)+'-'+u8.length; };
 let afterWho=null;   // something to show once a player has been picked
 async function importFiles(files){
-  await loadMySongs(); const added=[]; let dups=0;
+  await loadMySongs();
+  if(!mySongs) return alert('My songs can\'t be opened right now because another Keys window is still open with an older version. Close the other Keys tabs (or the installed app) and try again.');
+  const added=[]; let dups=0;
   for(const f of files){
     try{
       const buf=await f.arrayBuffer(), b=new Uint8Array(buf,0,4), sig=String.fromCharCode(...b), hash=hashBytes(new Uint8Array(buf));
@@ -1490,6 +1511,13 @@ $('#importFile').onchange=async e=>{
 };
 
 /* ---------- Lesson intro ---------- */
+function theoryHTML(L){   // "Learn more": the theory, how to practise, what to watch out for
+  if(!L.learn) return '';
+  const list=(t,a)=>a&&a.length ? `<h3>${t}</h3><ul>${a.map(x=>`<li>${x}</li>`).join('')}</ul>` : '';
+  return `<details class="theory" open><summary>${ICON.book} Learn more</summary>
+    <h3>The theory</h3>${L.learn.map(p=>`<p>${p}</p>`).join('')}
+    ${list('How to practise',L.practice)}${list('Watch out for',L.watch)}</details>`;
+}
 function miniKeyboard(L){
   const split=L.split||60, info=new Map();
   for(const n of L.notes){ const i=info.get(n.midi); if(!i) info.set(n.midi,{hand:n.midi<split?'L':'R',finger:n.finger}); else if(i.finger==null) i.finger=n.finger; }
@@ -1513,18 +1541,20 @@ function miniKeyboard(L){
   });
   return s+'</svg>';
 }
-function showIntro(L, it){
+/* Lesson intro. reread: opened from a result card or the top bar, to read it again (Close returns to playing) */
+function showIntro(L, it, reread=false){
   it = it || lessonItem(L);
-  if(!session) trainer=null;
+  if(!session && !reread) trainer=null;
   closeResult(); closeScreen();
   if(playing) togglePlay();
   const c=L.course, card=$('#introCard'), inSession=!!session;
   card.innerHTML=`<div class="kicker">${inSession?`Session ${session.idx+1}/${session.items.length} · New · `:''}${c.icon} ${c.title} · Lesson ${L.idx+1} of ${c.lessons.length}</div>
     <h2>${esc(L.title)}</h2>${L.text.map(p=>`<p>${p}</p>`).join('')}
     <div class="mini">${miniKeyboard(L)}</div>
+    ${theoryHTML(L)}
     ${L.both?`<div class="seg" id="introHands"><button data-h="right">Right hand</button><button data-h="left">Left hand</button><button data-h="both">Both hands</button></div>`:''}
     <div class="meta">${L.mode==='play'?'⏱ Play along: the music keeps going.':'⏸ Wait for me: the music waits for you.'}${L.metro?' 🥁 Metronome on.':''} Numbers are finger numbers. Pass with ${PASS}%.${best(L.id)?` Your best: ${best(L.id)}%.`:''}</div>
-    <div class="btns"><button class="primary" id="introStart">▶ Start</button><button id="introListen">👂 Listen first</button><button id="introBack">${inSession?'Skip':'Lessons'}</button></div>`;
+    <div class="btns"><button class="primary" id="introStart">${reread?'↺ Start again':'▶ Start'}</button><button id="introListen">👂 Listen first</button><button id="introBack">${reread?'Close':inSession?'Skip':'Lessons'}</button></div>`;
   const seg=$('#introHands');
   if(seg){
     const sync=()=>seg.querySelectorAll('button').forEach(b=>b.classList.toggle('on',b.dataset.h===hands));
@@ -1533,8 +1563,8 @@ function showIntro(L, it){
   }
   $('#introStart').onclick=()=>startItem(it,false);
   $('#introListen').onclick=()=>startItem(it,true);
-  $('#introBack').onclick=()=>{ if(inSession){ session.idx++; sessionCard(null); } else openScreen('learn'); };
-  $('#intro').hidden=false;
+  $('#introBack').onclick=()=>{ if(reread) $('#intro').hidden=true; else if(inSession){ session.idx++; sessionCard(null); } else openScreen('learn'); };
+  $('#intro').hidden=false; $('#intro').scrollTop=0;
 }
 
 
