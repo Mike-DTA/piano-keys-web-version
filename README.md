@@ -64,6 +64,11 @@ Connect the piano with a USB-OTG cable and allow MIDI access.
 - **🔖 Saved parts:** save labelled spots in a song or lesson (per player), shown as ticks on the timeline. The 🔖
   button in the top bar opens a quick menu to jump to a part, loop it (until the next saved part), rename or
   delete it. All saved parts are listed on the Songs screen and on each song's card, to start right there.
+- **🎙 Recordings:** press the record button in the top bar to record yourself, in a song (it starts the song)
+  or in free play. Stopping (or the song ending) saves the take for the current player on this device. Replay it
+  with the same timing and touch: keys light up green/red as you played them, and in a song the notes move just
+  as they did (including Wait-for-me pauses), with the playback controls to pause and scrub. Recordings are listed
+  under Songs → Your recordings, and can be downloaded as `.mid` files.
 - **Keyboard view:** hands (practise one hand while the app plays the other), speed, 🥁 metronome
   (accent on beat 1, count-in), sound, note names/fingers with adjustable size (Aa off/S/M/L/XL, saved per player), fullscreen.
 

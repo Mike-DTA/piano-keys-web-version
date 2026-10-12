@@ -62,6 +62,15 @@ canvas{position:absolute;inset:0;width:100%;height:100%;display:block;touch-acti
 .loopchip{border-color:var(--good)!important;color:var(--good);font-size:13px;max-width:180px;overflow:hidden;text-overflow:ellipsis}
 @media (max-width:640px){ #transport{flex-wrap:wrap;row-gap:0} #transport #play{min-width:44px} #tl{order:9;flex-basis:100%;height:28px} #tDur{margin-left:auto} }
 
+/* Recording */
+.rec svg{color:var(--bad)}
+.rec.on{border-color:var(--bad);color:var(--bad);font-variant-numeric:tabular-nums}
+.rec.on svg{animation:recpulse 1s ease-in-out infinite}
+@keyframes recpulse{50%{opacity:.35}}
+.replaychip{border-color:var(--bad)!important;color:var(--bad)}
+.reclist{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:4px 12px;margin-bottom:6px}
+.reclist .mrow{margin:0}
+
 /* Saved parts menu */
 .pop{position:fixed;z-index:9;right:8px;width:min(380px,calc(100vw - 16px));max-height:70vh;overflow:auto;background:var(--panel);border:1px solid var(--line);border-radius:14px;box-shadow:0 10px 30px rgba(0,0,0,.5);padding:12px}
 .pop .phead{display:flex;align-items:center;gap:8px;margin-bottom:8px}
@@ -242,6 +251,7 @@ h2.sec{font-size:13px;text-transform:uppercase;letter-spacing:.07em;color:var(--
       </select>
       <select id="speed" aria-label="Speed"></select>
       <button id="marksBtn" class="ic" title="Saved parts: jump to, loop or save a part of this song" aria-label="Saved parts"></button>
+      <button id="recBtn" class="ic rec" title="Record yourself, to replay later" aria-label="Record"></button>
       <button id="metro" aria-pressed="false" title="Metronome">🥁</button>
       <button id="sound" aria-pressed="false" title="Hear the song while playing along">🔊</button>
       <select id="labels" aria-label="Size of note names and finger numbers" title="Size of note names and finger numbers"></select>
@@ -258,6 +268,7 @@ h2.sec{font-size:13px;text-transform:uppercase;letter-spacing:.07em;color:var(--
     <div id="tl" role="slider" aria-label="Position in the song" tabindex="-1"><div id="tlTrack"><div id="tlLoop" hidden></div><div id="tlFill"></div><div id="tlMarks"></div><div id="tlThumb"></div></div></div>
     <span class="tt" id="tDur">0:00</span>
     <button id="tLoop" class="loopchip ic" hidden title="Stop looping"></button>
+    <button id="tReplay" class="loopchip replaychip ic" hidden title="Stop the replay"></button>
     <button id="tMark" class="ic" title="Save this spot as a part" aria-label="Save this spot as a part"></button>
   </div>
   <main>
