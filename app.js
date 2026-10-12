@@ -117,7 +117,7 @@ let profiles=loadProfiles();
 if(!profiles.list.some(p=>p.id===profiles.active)) profiles.active=profiles.list[0].id;
 const me=()=>profiles.list.find(p=>p.id===profiles.active);
 function saveProfiles(){ try{ localStorage.setItem(IKEY, JSON.stringify(profiles)); }catch(e){} }
-function blankProg(){ return {v:1, xp:0, lessons:{}, songs:{}, days:{}, skills:{}, ach:{}, counts:{drills:0,ear:0,sessions:0,runs:0,trainer:0,bestCombo:0}, history:[], bestDays:0, settings:{goal:10, sessionMin:10, drillMode:'wait'}, created:Date.now()}; }
+function blankProg(){ return {v:1, xp:0, lessons:{}, songs:{}, marks:{}, days:{}, skills:{}, ach:{}, counts:{drills:0,ear:0,sessions:0,runs:0,trainer:0,bestCombo:0}, history:[], bestDays:0, settings:{goal:10, sessionMin:10, drillMode:'wait'}, created:Date.now()}; }
 function loadProg(id=profiles.active){
   try{ const p=JSON.parse(localStorage.getItem(progKey(id))); if(p && p.v){ const b=blankProg(); return Object.assign(b,p,{counts:Object.assign(b.counts,p.counts), settings:Object.assign(b.settings,p.settings)}); } }catch(e){}
   const p=blankProg();
@@ -220,6 +220,10 @@ const OTHER='#4a5070';           // notes the app plays for the hand you're not 
 let song=null, notes=[], groups=[], gi=0, si=0, songEnd=0, songBeat=0.5, meter=4, lastBeat=null;
 let t=-LEAD, playing=false, finished=false, waiting=false, mode='wait', speed=1, hands='both';
 let soundOn=false, labelScale=1, metroOn=false, metroPref=false, lastTs=0, together=false, previewPhase=false;
+let scrub=null;       // timeline being dragged or animating to a new position: {target, snap, resume, drag}
+let partial=false, partialFrom=0;   // the run didn't start at the beginning (doesn't count toward stars)
+let loop=null;        // looping a saved part: {a, b, label, n}
+const LEADIN=1;       // seconds of song shown before a saved part starts
 let cur=null;         // what's loaded: {kind:'lesson'|'drill'|'free', def, title, sub, tip, lesson?, regen?, section?}
 let session=null;     // practice session in progress
 let trainer=null;     // speed trainer in progress
@@ -247,14 +251,38 @@ function loadSong(s){
   a = Math.floor(a/12)*12; b = Math.ceil((b+1)/12)*12;
   while(b-a<24){ if(a>36) a-=12; else b+=12; }
   setRange(a,b);
-  restart();
+  loop=null; scrub=null;
+  restart(); renderTimeline();
 }
 function restart(){
   for(const n of notes){ n.hit=false; n.missed=false; n.auto=false; n.req=wants(n); }
   for(const g of groups){ g.wrong=0; g.reveal=false; }
-  gi=0; si=0; t=-LEAD; playing=false; finished=false; waiting=false; lastBeat=null;
-  held.clear(); resetStats(); closeResult(); updateUI();
+  gi=0; si=0; t=-LEAD; playing=false; finished=false; waiting=false; lastBeat=null; partial=false;
+  held.clear(); resetStats(); closeResult();
+  if(loop) seekTo(loopStart());
+  updateUI();
 }
+/* Jump to song time T: notes before it count as played (not scored), the score starts again from here */
+function seekTo(T){
+  t=Math.max(-LEAD, Math.min(T, songEnd));
+  for(const n of notes){ n.missed=false; n.auto=false; n.req=wants(n); n.hit = n.start < t-1e-3; }
+  for(const g of groups){ g.wrong=0; g.reveal=false; }
+  si=notes.findIndex(n=>n.start>=t-1e-3); if(si<0) si=notes.length;
+  gi=groups.findIndex(g=>g.start>=t-1e-3); if(gi<0) gi=groups.length;
+  finished=false; waiting=false; lastBeat=null; held.clear(); resetStats(); closeResult();
+  partial = t > -LEAD+0.05 || !!loop; partialFrom=t;
+  updateUI();
+}
+/* Move smoothly to T (pausing meanwhile), then carry on playing if we were */
+function seekAnimated(T){
+  if(!notes.length) return;
+  const resume = scrub ? scrub.resume : playing;
+  if(playing){ playing=false; flushTime(); }
+  for(const n of notes){ n.hit=false; n.missed=false; }   // neutral colours while moving
+  closeResult(); finished=false;
+  scrub={target:Math.max(-LEAD, Math.min(T, songEnd)), snap:true, resume};
+}
+const loopStart=()=>Math.max(-LEAD, loop.a-LEADIN);
 function setRange(a,b){
   lo=Math.max(21,a); hi=Math.min(108,b); whites=[]; whiteIdx={};
   for(let m=lo;m<=hi;m++) if(!isBlack(m)){ whiteIdx[m]=whites.length; whites.push(m); }
@@ -361,11 +389,13 @@ cv.addEventListener('pointerup',release); cv.addEventListener('pointercancel',re
 // Computer keyboard: A W S E D F T G Y H U J K = C4..C5, Space = start/pause, Esc = close
 const KEYMAP='awsedftgyhujk';
 const downKeys=new Set();
-const overlayOpen=()=>!$('#screen').hidden || !$('#intro').hidden || !$('#who').hidden;
+const overlayOpen=()=>!$('#screen').hidden || !$('#intro').hidden || !$('#who').hidden || !$('#marksMenu').hidden;
 addEventListener('keydown',e=>{
-  if(e.key==='Escape'){ if(!$('#who').hidden){ if(!whoForced) closeWho(); } else if(!$('#intro').hidden) $('#intro').hidden=true; else if(!$('#screen').hidden) closeScreen(); return; }
+  if(e.key==='Escape'){ if(!$('#marksMenu').hidden) closeMarks(); else if(!$('#who').hidden){ if(!whoForced) closeWho(); } else if(!$('#intro').hidden) $('#intro').hidden=true; else if(!$('#screen').hidden) closeScreen(); return; }
   if(e.target.tagName==='SELECT' || e.target.tagName==='INPUT' || overlayOpen()) return;
   if(e.code==='Space'){ e.preventDefault(); togglePlay(); return; }
+  if(e.key==='ArrowLeft' || e.key==='ArrowRight'){ e.preventDefault(); seekAnimated((scrub?scrub.target:t)+(e.key==='ArrowLeft'?-5:5)); return; }
+  if(e.key==='Home'){ e.preventDefault(); $('#tStart').click(); return; }
   const i=KEYMAP.indexOf(e.key.toLowerCase()); if(i<0 || e.repeat || downKeys.has(e.key)) return;
   downKeys.add(e.key); noteOn(60+i,'key');
 });
@@ -393,17 +423,26 @@ function step(dt){
     else if(mode==='play' && soundOn) tone(n.midi,n.dur/speed,0.4);
   }
   t=nt;
+  if(loop && t>=loop.b-1e-3){ loop.n++; seekTo(loopStart()); return; }   // play the saved part again
   if(t>songEnd+0.8 && (mode!=='wait' || gi>=groups.length)) finish();
   updateHud();
 }
 function frame(ts){
   const raw=(ts-(lastTs||ts))/1000, dt=Math.min(0.05,raw); lastTs=ts;
-  if(playing){
+  if(scrub){   // glide towards the timeline position; snap quickly once it's let go
+    const k=1-Math.exp(-Math.min(raw,0.1)*(scrub.snap?28:7));
+    t+=(scrub.target-t)*k;
+    if(scrub.snap && Math.abs(scrub.target-t)<0.004){
+      const r=scrub.resume; t=scrub.target; scrub=null; seekTo(t);
+      if(r){ playing=true; holdWake(); }
+      updateUI();
+    }
+  } else if(playing){
     step(dt);
     const r=Math.min(raw,0.25); pendSec+=r; if(session) session.sec+=r;
     if(pendSec>=10) flushTime();
   }
-  draw(); requestAnimationFrame(frame);
+  draw(); updateTimeline(); requestAnimationFrame(frame);
 }
 
 /* =====================================================================
@@ -413,7 +452,7 @@ const lessonItem=l=>({kind:'lesson', lesson:l, def:l, title:l.title, sub:`${l.co
 function setHands(h){ hands=h; $('#hands').value=h; }
 
 function startItem(it, listen=false){
-  closeScreen(); $('#intro').hidden=true; closeResult();
+  closeScreen(); $('#intro').hidden=true; closeResult(); closeMarks();
   cur=it;
   const d=it.def;
   if(!d.both && hands!=='both') setHands('both');
@@ -427,10 +466,10 @@ function runXP(acc,res){ let xp=Math.round(stats.hit*acc/100*0.5)+(acc>=PASS?5:0
 
 function recordRun(acc){
   if(!cur || mode==='listen' || stats.hit+stats.wrong+stats.miss===0) return null;
-  const d=cur.def, res={acc, counts:isCounting()};
+  const d=cur.def, res={acc, counts:isCounting() && !partial};
   prog.counts.runs++; prog.counts.bestCombo=Math.max(prog.counts.bestCombo||0, stats.bestStreak);
   if(cur.lesson && res.counts) Object.assign(res, updateLesson(cur.lesson.id, acc));
-  if(cur.song && (hands==='both' || !d.both)){   // library song, played with every hand it needs
+  if(cur.song && !partial && (hands==='both' || !d.both)){   // whole song, played with every hand it needs
     const r=prog.songs[cur.song.id]||(prog.songs[cur.song.id]={best:0, plays:0});
     res.prevBest=r.best; r.best=Math.max(r.best,acc); r.plays++; r.last=Date.now(); res.songBest=r.best;
   }
@@ -456,6 +495,7 @@ function finish(){
     return setResult(cur.title,null,'♪','Your turn! Now play it yourself.',[{label:'▶ Start',primary:true,fn:()=>startItem(cur,false)},session?{label:'Skip',fn:()=>{ session.idx++; sessionCard(null); }}:{label:'Menu',fn:()=>openScreen('learn')}]);
   const res=recordRun(acc);
   if(session) return sessionAfter(acc,res);
+  if(partial && !trainer) return partialFinish(acc,res);
   if(trainer) return trainerAfter(acc,res);
   if(!cur || cur.kind==='free') return freeFinish(acc,res);
   if(cur.kind==='lesson') return lessonFinish(acc,res);
@@ -484,6 +524,13 @@ function setResult(title,starsN,big,detail,buttons,opt={}){
 function closeResult(){ clearCountdown(); $('#result').hidden=true; }
 const statLine=()=>`${stats.hit} hit · ${stats.miss} missed · ${stats.wrong} wrong · best streak ${stats.bestStreak}`;
 
+function partialFinish(acc,res){
+  const from=fmtTime(Math.max(0,partialFrom)), at=partialFrom;
+  setResult(`Practice from ${from}`, null, acc+'%', statLine()+'. Only full play-throughs from the start count toward stars and best scores.',
+    [{label:`↺ From ${from} again`, primary:true, fn:()=>{ seekTo(at); togglePlay(); }},
+     {label:'From the start', fn:()=>{ restart(); togglePlay(); }},
+     {label:'Close', fn:closeResult}], {xp:res&&res.xp});
+}
 function freeFinish(acc,res){
   const back = cur&&cur.song ? {label:'🎵 Songs',fn:()=>openScreen('songs')} : {label:'Close',fn:closeResult};
   if(mode==='listen'){
@@ -873,7 +920,6 @@ function draw(){
   for(const m of whites) if(m%12===0 && ww>=16){ const r=keyRect(m); cx.fillText('C'+(m/12-1), r.x+r.w/2, H-4); }
   for(let m=lo;m<=hi;m++) if(isBlack(m)){ const r=keyRect(m); if(r) paintKey(m,r); }
 
-  if(songEnd>0){ cx.fillStyle='rgba(255,255,255,0.08)'; cx.fillRect(0,0,W,3); cx.fillStyle=C.accent; cx.fillRect(0,0,W*Math.max(0,Math.min(1,t/songEnd)),3); }
 }
 
 /* =====================================================================
@@ -886,11 +932,16 @@ function updateHud(){
   const handTxt = hands==='both' ? '' : ` · ${hands} hand only`;
   const sess = session ? `<small class="sess">Session ${session.idx+1}/${session.items.length} · ${fmtTime(session.sec)} / ~${session.est}:00</small>`
              : trainer ? `<small class="sess">⚡ Speed trainer · ${Math.round(speed*100)}% → goal ${Math.round(trainer.goal*100)}%</small>` : '';
+  const lp = loop ? `<small class="sess">🔁 Looping “${esc(loop.label)}” · round ${loop.n}</small>` : '';
   const head = previewPhase ? '👂 Listen carefully…' : mode==='listen' ? 'Listening…' : `${accuracy()}% · streak ${stats.streak}`;
-  $('#hud').innerHTML = `${head}${sess}<small>${title}${handTxt}</small>${mode==='listen'&&!previewPhase?'':tip}`;
+  $('#hud').innerHTML = `${head}${sess}${lp}<small>${title}${handTxt}</small>${mode==='listen'&&!previewPhase?'':tip}`;
 }
 function updateUI(){
-  $('#play').textContent = playing ? '❚❚ Pause' : (finished||t<=-LEAD ? '▶ Start' : '▶ Resume');
+  const on = playing || (scrub && scrub.resume);
+  const pl = on ? 'Pause' : (finished||t<=-LEAD ? 'Start' : 'Resume');
+  if($('#play').dataset.s!==pl+innerWidth){ $('#play').dataset.s=pl+innerWidth; $('#play').innerHTML=(on?ICON.pause:ICON.play)+(innerWidth<=640?'':`<span>${pl}</span>`); $('#play').setAttribute('aria-label',pl); }
+  $('#transport').classList.toggle('off', !notes.length);
+  const lb=$('#tLoop'); lb.hidden=!loop; if(loop) lb.innerHTML=`${ICON.loop}<span>${esc(loop.label)} ✕</span>`;
   $('#msg').textContent = !notes.length ? 'Play freely, or pick something from 🎵 Songs' : !playing && !finished && t<=-LEAD ? 'Press Start (or Space) when you\'re ready' : (!playing && !finished ? 'Paused' : '');
   updateHud();
 }
@@ -900,6 +951,7 @@ function releaseWake(){ try{ wake&&wake.release(); }catch(e){} wake=null; }
 function togglePlay(){
   audio();
   if(!notes.length){ openScreen('songs'); return; }   // free keyboard: nothing to play yet
+  if(scrub){ scrub.resume=!scrub.resume; updateUI(); return; }
   if(finished) restart();
   playing=!playing; lastTs=0;
   if(playing) holdWake(); else { releaseWake(); flushTime(); }
@@ -913,7 +965,56 @@ $('#hands').onchange=e=>{ hands=e.target.value; restart(); };
 $('#speed').innerHTML=SPEEDS.map(s=>`<option value="${s}"${s===1?' selected':''}>${Math.round(s*100)}%</option>`).join('');
 $('#speed').onchange=e=>{ speed=parseFloat(e.target.value); };
 $('#play').onclick=togglePlay;
-$('#restart').onclick=()=>{ restart(); releaseWake(); };
+/* Line icons for the playback controls (they follow the button's text colour) */
+const svg=(body,extra='')=>`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"${extra}>${body}</svg>`;
+const ICON={
+  start: svg('<path d="M18 19 9 12l9-7z" fill="currentColor"/><path d="M6 5v14"/>'),
+  back5: svg('<path d="M3 12a9 9 0 1 0 2.7-6.4"/><path d="M3 4v5h5"/><text x="12.2" y="16" text-anchor="middle" font-size="9" font-weight="700" fill="currentColor" stroke="none" font-family="system-ui,sans-serif">5</text>'),
+  fwd5:  svg('<path d="M21 12a9 9 0 1 1-2.7-6.4"/><path d="M21 4v5h-5"/><text x="11.8" y="16" text-anchor="middle" font-size="9" font-weight="700" fill="currentColor" stroke="none" font-family="system-ui,sans-serif">5</text>'),
+  play:  svg('<path d="M7 4.5v15l12.5-7.5z" fill="currentColor"/>'),
+  pause: svg('<rect x="6" y="4.5" width="4" height="15" rx="1" fill="currentColor" stroke="none"/><rect x="14" y="4.5" width="4" height="15" rx="1" fill="currentColor" stroke="none"/>'),
+  mark:  svg('<path d="M18 21l-6-4.5L6 21V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2z"/>'),
+  markAdd: svg('<path d="M15 21.5l-5.5-4-5.5 4V8a2 2 0 0 1 2-2h7a2 2 0 0 1 2 2z"/>'+   // bookmark with a plus badge on its top-right corner
+               '<path d="M18.5 1.5v7M15 5h7" style="stroke:var(--panel2)" stroke-width="5"/><path d="M18.5 2v6M15.5 5h6" stroke-width="2.4"/>'),
+  edit:  svg('<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/>'),
+  del:   svg('<path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/>'),
+  loop:  svg('<path d="m17 2 4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="m7 22-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/>'),
+};
+$('#tStart').innerHTML=ICON.start; $('#tBack').innerHTML=ICON.back5; $('#tFwd').innerHTML=ICON.fwd5; $('#tMark').innerHTML=ICON.markAdd; $('#marksBtn').innerHTML=ICON.mark;
+$('#tStart').onclick=()=>seekAnimated(loop ? loopStart() : -LEAD);
+$('#tBack').onclick=()=>seekAnimated((scrub?scrub.target:t)-5);
+$('#tFwd').onclick=()=>seekAnimated((scrub?scrub.target:t)+5);
+$('#tLoop').onclick=()=>{ loop=null; renderTimeline(); updateUI(); };
+$('#tMark').onclick=()=>openMarks(true);
+$('#marksBtn').onclick=()=>$('#marksMenu').hidden ? openMarks(false) : closeMarks();
+
+/* ---------- Timeline ---------- */
+const TL=$('#tl');
+let tlShown='';
+function updateTimeline(){
+  const v=scrub?scrub.target:t, f=songEnd>0?Math.max(0,Math.min(1,v/songEnd)):0, pc=(f*100).toFixed(2)+'%';
+  if(pc===tlShown) return;
+  tlShown=pc; $('#tlFill').style.width=pc; $('#tlThumb').style.left=pc;
+  $('#tCur').textContent=fmtTime(Math.max(0,v)); $('#tl').setAttribute('aria-valuetext',fmtTime(Math.max(0,v)));
+}
+function renderTimeline(){   // song length, saved-part ticks and the looped part
+  tlShown=''; $('#tDur').textContent=fmtTime(songEnd);
+  const at=x=>(songEnd>0?Math.max(0,Math.min(100,100*x/songEnd)):0).toFixed(2)+'%';
+  $('#tlMarks').innerHTML=marksFor(markKey()).map((m,i)=>`<span class="tmark" data-i="${i}" style="left:${at(m.t)}" title="${esc(m.label)} · ${fmtTime(m.t)}"></span>`).join('');
+  $('#tlMarks').querySelectorAll('.tmark').forEach(el=>el.onpointerdown=e=>{ e.stopPropagation(); jumpToMark(+el.dataset.i); });
+  const lp=$('#tlLoop'); lp.hidden=!loop;
+  if(loop){ lp.style.left=at(loop.a); lp.style.width=`calc(${at(Math.min(loop.b,songEnd))} - ${at(loop.a)})`; }
+}
+const timeAt=x=>{ const r=TL.getBoundingClientRect(), f=Math.max(0,Math.min(1,(x-r.left)/r.width)); return f<0.003 ? -LEAD : f*songEnd; };
+TL.addEventListener('pointerdown',e=>{
+  if(!notes.length) return;
+  TL.setPointerCapture(e.pointerId); TL.classList.add('drag');
+  seekAnimated(timeAt(e.clientX)); scrub.snap=false; scrub.drag=true;
+});
+TL.addEventListener('pointermove',e=>{ if(scrub && scrub.drag) scrub.target=timeAt(e.clientX); });
+const tlUp=()=>{ TL.classList.remove('drag'); if(scrub && scrub.drag){ scrub.drag=false; scrub.snap=true; } };
+TL.addEventListener('pointerup',tlUp); TL.addEventListener('pointercancel',tlUp);
+addEventListener('resize',updateUI);
 $('#metro').onclick=e=>{ metroOn=!metroOn; if(!(song&&song.metro)) metroPref=metroOn; e.currentTarget.setAttribute('aria-pressed',metroOn); audio(); };
 $('#sound').onclick=e=>{ soundOn=!soundOn; e.currentTarget.setAttribute('aria-pressed',soundOn); audio(); };
 const LABEL_SIZES=[[0,'Aa off'],[1,'Aa S'],[1.4,'Aa M'],[1.8,'Aa L'],[2.4,'Aa XL']];
@@ -940,7 +1041,7 @@ document.addEventListener('visibilitychange',()=>{
    ===================================================================== */
 let screenName=null;
 function openScreen(name){
-  closeResult(); $('#intro').hidden=true;
+  closeResult(); $('#intro').hidden=true; closeMarks();
   if(playing) togglePlay();
   trainer=null; if(session){ flushTime(); session=null; }
   screenName=name;
@@ -1048,6 +1149,7 @@ function renderSongs(){
   B.innerHTML=`<input id="sq" class="search" type="search" placeholder="Search ${SONGS.length+mySongs.length} songs or composers" value="${esc(songQ)}" autocomplete="off">
   <div class="chips" id="slv">${[0,1,2,3].map(k=>`<button data-l="${k}" class="${k===songLvl?'on':''}">${k?dots(k)+' '+LEVELS[k]:'All levels'}</button>`).join('')}</div>
   <div class="chips" id="sct"><button data-c="" class="${songCat?'':'on'}">All</button>${Object.entries(songCats()).map(([k,l])=>`<button data-c="${k}" class="${k===songCat?'on':''}">${l}</button>`).join('')}</div>
+  ${savedPartsHTML()}
   <div id="slist"></div>
   <h2 class="sec">More songs</h2>
   <div class="grid">
@@ -1064,6 +1166,11 @@ function renderSongs(){
   bind('.sl',el=>showIntro(LESSON[el.dataset.id]));
   bind('#openMid',()=>$('#file').click());
   bind('.pp',el=>startItem(genPop(el.dataset.p)));
+  bind('.mk',el=>startAtMark(el.dataset.k,+el.dataset.i));
+}
+function savedPartsHTML(){   // every saved part of this player, in songs and lessons
+  const all=Object.keys(prog.marks).flatMap(k=>{ const title=markTitle(k); return title ? prog.marks[k].map((m,i)=>({k,i,m,title})) : []; });
+  return all.length ? `<h2 class="sec">🔖 Your saved parts</h2><div class="marks">${all.map(x=>`<button class="mk" data-k="${esc(x.k)}" data-i="${x.i}">▶ ${esc(x.title)} · <b>${esc(x.m.label)}</b> <small class="muted">${fmtTime(x.m.t)}</small></button>`).join('')}</div>` : '';
 }
 function renderSongList(){
   const q=songQ.trim().toLowerCase();
@@ -1084,7 +1191,8 @@ async function showSong(e){
     <div class="meta">${fmtTime(len)} at full speed · ${d.both?'both hands':'one hand'}${r?` · best ${r.best}% · played ${r.plays}×`:''}</div>
     ${d.both?`<div class="seg" id="sgHands"><button data-h="right">Right hand</button><button data-h="left">Left hand</button><button data-h="both">Both hands</button></div><br>`:''}
     <div class="seg" id="sgMode"><button data-m="wait">⏸ Wait for me</button><button data-m="play">⏱ Play along</button></div>
-    ${M&&M.tracks.length>1?`<div class="meta">Parts to play:</div><div class="tracks">${M.tracks.map(t=>`<label><input type="checkbox" data-t="${t.index}"${M.on.includes(t.index)?' checked':''}> ${esc(t.name)} <small>(${t.count})</small></label>`).join('')}</div>`:''}
+    ${marksFor(e.id).length?`<div class="meta">🔖 Saved parts:</div><div class="marks">${marksFor(e.id).map((m,i)=>`<button class="mk" data-i="${i}">▶ <b>${esc(m.label)}</b> <small class="muted">${fmtTime(m.t)}</small></button>`).join('')}</div>`:''}
+    ${M&&M.tracks.length>1?`<div class="meta">Instruments to play:</div><div class="tracks">${M.tracks.map(t=>`<label><input type="checkbox" data-t="${t.index}"${M.on.includes(t.index)?' checked':''}> ${esc(t.name)} <small>(${t.count})</small></label>`).join('')}</div>`:''}
     <div class="btns"><button class="primary" id="sgStart">▶ Start</button><button id="sgListen">👂 Listen</button><button id="sgTrain">⚡ Speed trainer</button><button id="sgBack">Back</button>${M?'<button id="sgDel" class="danger">Remove</button>':''}</div>`;
   const seg=(id,key,get,set)=>{ const el=$(id); if(!el) return; const sync=()=>el.querySelectorAll('button').forEach(b=>b.classList.toggle('on',b.dataset[key]===get())); el.querySelectorAll('button').forEach(b=>b.onclick=()=>{ set(b.dataset[key]); sync(); }); sync(); };
   seg('#sgHands','h',()=>hands,setHands);
@@ -1093,6 +1201,7 @@ async function showSong(e){
   $('#sgListen').onclick=()=>startSong(e,true);
   $('#sgTrain').onclick=()=>startTrainer(songItem(e));
   $('#sgBack').onclick=()=>{ $('#intro').hidden=true; };
+  card.querySelectorAll('.mk').forEach(b=>b.onclick=()=>startAtMark(e.id,+b.dataset.i));
   if(M){
     $('#sgTitle').onchange=ev=>{ const t=ev.target.value.trim(); if(!t) return; M.title=e.title=e.def.title=t; saveMySong(M); renderSongList(); };
     card.querySelectorAll('.tracks input').forEach(cb=>cb.onchange=()=>{
@@ -1393,6 +1502,73 @@ function showIntro(L, it){
   $('#intro').hidden=false;
 }
 
+
+
+/* =====================================================================
+   Saved parts: labelled spots in a song or lesson, per player
+   ===================================================================== */
+function markKey(c=cur){ return c ? (c.song ? c.song.id : c.lesson ? 'lesson:'+c.lesson.id : null) : null; }   // drills are new every time
+function marksFor(k){ return (k && prog.marks[k]) || []; }
+function markTitle(k){ if(k.startsWith('lesson:')){ const l=LESSON[k.slice(7)]; return l&&l.title; } const e=self.SONGS&&songById(k); return e&&e.title; }
+function jumpToMark(i){ const m=marksFor(markKey())[i]; if(!m) return; if(loop && loop.a!==m.t){ loop=null; renderTimeline(); } seekAnimated(Math.max(-LEAD, m.t-LEADIN)); }
+function loopMark(i){
+  const L=marksFor(markKey()), m=L[i]; if(!m) return;
+  if(loop && loop.a===m.t){ loop=null; renderTimeline(); updateUI(); return; }   // tap again to stop
+  loop={a:m.t, b:i+1<L.length ? L[i+1].t : songEnd+0.8, label:m.label, n:1};
+  renderTimeline(); seekAnimated(loopStart()); scrub.resume=true; updateUI();
+}
+function saveMarks(){ saveProg(); renderTimeline(); }
+async function startAtMark(k,i){   // from a menu: open the song or lesson and start just before the part
+  const m=marksFor(k)[i]; if(!m) return;
+  let it;
+  if(k.startsWith('lesson:')) it=lessonItem(LESSON[k.slice(7)]);
+  else{ const e=songById(k); if(!e) return; try{ await songDef(e); }catch(err){ return toast('⚠ '+err.message); } e.def.mode=prog.settings.songMode||'wait'; it=songItem(e); }
+  session=null; trainer=null; startItem(it); seekTo(Math.max(-LEAD, m.t-LEADIN));
+}
+
+const MM=$('#marksMenu');
+let markEdit=-1, markAdding=false;
+function openMarks(adding){
+  if(playing) togglePlay();
+  markEdit=-1; markAdding=adding; renderMarks();
+  MM.style.top=($('header').getBoundingClientRect().bottom+6)+'px'; MM.hidden=false;
+  const inp=MM.querySelector('#mLabel'); if(adding && inp){ inp.focus(); inp.select(); }
+}
+function closeMarks(){ MM.hidden=true; }
+function renderMarks(){
+  const k=markKey(), L=marksFor(k), now=Math.max(0,scrub?scrub.target:t);
+  let body;
+  if(!k) body = cur ? '<p class="muted">Drills are new every time, so they can\'t have saved parts. Saved parts work in songs and lessons.</p>'
+                    : '<p class="muted">Saved parts work in songs and lessons. Open one, find the spot on the timeline, then save it here.</p>';
+  else body=(L.length ? L.map((m,i)=> i===markEdit
+      ? `<div class="mrow"><input id="mRename" maxlength="40" value="${esc(m.label)}"><button class="primary" data-a="ren" data-i="${i}">Save</button></div>`
+      : `<div class="mrow"><button class="mgo ic" data-a="go" data-i="${i}">${ICON.play}<b>${esc(m.label)}</b><small>${fmtTime(m.t)}</small></button>`+
+        `<button data-a="loop" data-i="${i}" title="Loop this part (until the next saved part)" class="ic${loop&&loop.a===m.t?' on':''}">${ICON.loop}</button>`+
+        `<button data-a="edit" data-i="${i}" class="ic" title="Rename" aria-label="Rename">${ICON.edit}</button><button data-a="del" data-i="${i}" class="ic" title="Delete" aria-label="Delete">${ICON.del}</button></div>`).join('')
+      : '<p class="muted">No saved parts yet. Move to a spot (drag the timeline or pause) and save it.</p>')+
+    `<div class="madd"><input id="mLabel" maxlength="40" placeholder="Name this part" value="Part ${L.length+1}"><button class="primary" data-a="add">Save at ${fmtTime(now)}</button></div>`;
+  MM.innerHTML=`<div class="phead"><div><b class="ic">${ICON.mark} Saved parts</b><small>${cur?esc(cur.title):'Nothing open'}</small></div><button data-a="close" aria-label="Close">✕</button></div>${body}`;
+  MM.querySelectorAll('button[data-a]').forEach(b=>b.onclick=()=>markAction(b.dataset.a,+b.dataset.i));
+  const ren=MM.querySelector('#mRename'); if(ren){ ren.focus(); ren.onkeydown=e=>{ if(e.key==='Enter') markAction('ren',markEdit); }; }
+  const add=MM.querySelector('#mLabel'); if(add) add.onkeydown=e=>{ if(e.key==='Enter') markAction('add'); };
+}
+function markAction(a,i){
+  const k=markKey(), L=marksFor(k);
+  if(a==='close') return closeMarks();
+  if(a==='go'){ closeMarks(); return jumpToMark(i); }
+  if(a==='loop'){ closeMarks(); return loopMark(i); }
+  if(a==='edit'){ markEdit=i; return renderMarks(); }
+  if(a==='ren'){ const v=MM.querySelector('#mRename').value.trim(); if(v){ L[i].label=v; if(loop&&loop.a===L[i].t) loop.label=v; saveMarks(); updateUI(); } markEdit=-1; return renderMarks(); }
+  if(a==='del'){ if(loop&&loop.a===L[i].t) loop=null; L.splice(i,1); if(!L.length) delete prog.marks[k]; saveMarks(); updateUI(); return renderMarks(); }
+  if(a==='add' && k){
+    const label=MM.querySelector('#mLabel').value.trim()||`Part ${L.length+1}`, at=+Math.max(0,scrub?scrub.target:t).toFixed(2);
+    const list=prog.marks[k]||(prog.marks[k]=[]), same=list.find(m=>Math.abs(m.t-at)<0.05);
+    if(same) same.label=label; else{ list.push({t:at, label}); list.sort((x,y)=>x.t-y.t); }   // same spot: just rename it
+    saveMarks();
+    toast(`🔖 Saved “${label}” at ${fmtTime(at)}`); closeMarks();
+  }
+}
+document.addEventListener('pointerdown',e=>{ if(!MM.hidden && !MM.contains(e.target) && !e.target.closest('#marksBtn,#tMark')) closeMarks(); });
 
 /* ---------- Players ("Who's playing?") ---------- */
 const AVATARS=['🎹','🦊','🐼','🐸','🦁','🐯','🐨','🐙','🦄','🐝','🐢','🐬','🦉','🐱','🐶','🐰','🚀','⭐','🌈','🎸'];

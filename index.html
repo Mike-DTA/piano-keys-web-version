@@ -42,6 +42,46 @@ canvas{position:absolute;inset:0;width:100%;height:100%;display:block;touch-acti
 .stars{color:var(--star);font-size:26px;letter-spacing:2px}
 .stars .off{color:#3a4064}
 
+/* Transport: playback controls and timeline */
+#transport{display:flex;align-items:center;gap:6px;background:var(--panel);border-top:1px solid var(--line);padding:3px 8px 4px;padding-left:max(8px,env(safe-area-inset-left));padding-right:max(8px,env(safe-area-inset-right))}
+#transport.off{opacity:.35;pointer-events:none}
+#transport button{padding:5px 9px;flex:none}
+.ic{display:inline-flex;align-items:center;justify-content:center;gap:6px}
+.ic svg{width:18px;height:18px;flex:none;display:block}
+#transport .ic:not(#play):not(.loopchip){padding:6px 8px}
+#transport #play{min-width:92px}
+.tt{flex:none;min-width:36px;text-align:center;color:var(--muted);font-size:12px;font-variant-numeric:tabular-nums}
+#tl{flex:1;min-width:70px;height:34px;display:flex;align-items:center;cursor:pointer;touch-action:none;outline:none}
+#tlTrack{position:relative;width:100%;height:6px;background:var(--panel2);border-radius:3px}
+#tlFill{position:absolute;left:0;top:0;bottom:0;width:0;background:var(--accent);border-radius:3px}
+#tlLoop{position:absolute;top:-4px;bottom:-4px;background:rgba(61,220,151,.18);border:1px solid var(--good);border-radius:4px}
+#tlThumb{position:absolute;top:50%;left:0;width:16px;height:16px;margin:-8px 0 0 -8px;border-radius:50%;background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.5);transition:transform .12s}
+#tl.drag #tlThumb,#tl:hover #tlThumb{transform:scale(1.25)}
+.tmark{position:absolute;top:-7px;width:16px;height:20px;margin-left:-8px;cursor:pointer}
+.tmark::before{content:"";position:absolute;left:6.5px;top:0;width:3px;height:20px;border-radius:2px;background:var(--star)}
+.loopchip{border-color:var(--good)!important;color:var(--good);font-size:13px;max-width:180px;overflow:hidden;text-overflow:ellipsis}
+@media (max-width:640px){ #transport{flex-wrap:wrap;row-gap:0} #transport #play{min-width:44px} #tl{order:9;flex-basis:100%;height:28px} #tDur{margin-left:auto} }
+
+/* Saved parts menu */
+.pop{position:fixed;z-index:9;right:8px;width:min(380px,calc(100vw - 16px));max-height:70vh;overflow:auto;background:var(--panel);border:1px solid var(--line);border-radius:14px;box-shadow:0 10px 30px rgba(0,0,0,.5);padding:12px}
+.pop .phead{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.pop .phead div{flex:1;min-width:0}
+.pop .phead small{display:block;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pop .phead button{background:transparent;border-color:transparent}
+.mrow{display:flex;gap:4px;align-items:center;margin:4px 0}
+.mrow .mgo{flex:1;min-width:0;text-align:left;display:flex;gap:8px;align-items:center;white-space:nowrap;overflow:hidden}
+.mrow .mgo b{font-weight:600;overflow:hidden;text-overflow:ellipsis}
+.mrow .mgo small{margin-left:auto;color:var(--muted);font-variant-numeric:tabular-nums}
+.mrow button{padding:6px 9px}
+.mrow .mgo{justify-content:flex-start}
+.mrow .mgo svg{width:13px;height:13px}
+.mrow .on{border-color:var(--good);color:var(--good)}
+.mrow input{flex:1;min-width:0}
+.madd{display:flex;gap:6px;margin-top:10px;padding-top:10px;border-top:1px solid var(--line)}
+.madd input,.mrow input{background:var(--bg);color:var(--text);border:1px solid var(--line);border-radius:8px;padding:7px 10px;font:inherit}
+.madd input{flex:1;min-width:0}
+.marks{display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 10px}
+
 /* Full screens (Home, Lessons, Practice, Progress) */
 #screen{position:fixed;inset:0;background:var(--bg);overflow:auto;z-index:10;padding:0 max(16px,env(safe-area-inset-right)) 28px max(16px,env(safe-area-inset-left))}
 .snav{position:sticky;top:0;z-index:2;background:var(--bg);display:flex;gap:6px;align-items:center;padding:10px 0;overflow-x:auto;scrollbar-width:none}
@@ -201,8 +241,7 @@ h2.sec{font-size:13px;text-transform:uppercase;letter-spacing:.07em;color:var(--
         <option value="left">Left hand</option>
       </select>
       <select id="speed" aria-label="Speed"></select>
-      <button id="play" class="primary">▶ Start</button>
-      <button id="restart" title="Restart">↺</button>
+      <button id="marksBtn" class="ic" title="Saved parts: jump to, loop or save a part of this song" aria-label="Saved parts"></button>
       <button id="metro" aria-pressed="false" title="Metronome">🥁</button>
       <button id="sound" aria-pressed="false" title="Hear the song while playing along">🔊</button>
       <select id="labels" aria-label="Size of note names and finger numbers" title="Size of note names and finger numbers"></select>
@@ -210,6 +249,17 @@ h2.sec{font-size:13px;text-transform:uppercase;letter-spacing:.07em;color:var(--
       <button id="midi" class="chip">Connect piano</button>
     </div>
   </header>
+  <div id="transport" class="off">
+    <button id="tStart" class="ic" title="Back to the start (Home)" aria-label="Back to the start"></button>
+    <button id="tBack" class="ic" title="Back 5 seconds (←)" aria-label="Back 5 seconds"></button>
+    <button id="play" class="primary ic"></button>
+    <button id="tFwd" class="ic" title="Forward 5 seconds (→)" aria-label="Forward 5 seconds"></button>
+    <span class="tt" id="tCur">0:00</span>
+    <div id="tl" role="slider" aria-label="Position in the song" tabindex="-1"><div id="tlTrack"><div id="tlLoop" hidden></div><div id="tlFill"></div><div id="tlMarks"></div><div id="tlThumb"></div></div></div>
+    <span class="tt" id="tDur">0:00</span>
+    <button id="tLoop" class="loopchip ic" hidden title="Stop looping"></button>
+    <button id="tMark" class="ic" title="Save this spot as a part" aria-label="Save this spot as a part"></button>
+  </div>
   <main>
     <canvas id="cv"></canvas>
     <div id="hud"></div>
@@ -231,6 +281,7 @@ h2.sec{font-size:13px;text-transform:uppercase;letter-spacing:.07em;color:var(--
 <div id="screen" hidden><nav class="snav" id="snav"></nav><div id="sbody"></div></div>
 <div id="intro" class="overlay" hidden><div class="card intro" id="introCard"></div></div>
 <div id="who" class="overlay" hidden><div class="card whocard" id="whoCard"></div></div>
+<div id="marksMenu" class="pop" hidden></div>
 <div id="toasts"></div>
 <input type="file" id="importFile" accept=".json,application/json" hidden>
 <input type="file" id="file" multiple hidden>

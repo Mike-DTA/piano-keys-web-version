@@ -58,6 +58,12 @@ Connect the piano with a USB-OTG cable and allow MIDI access.
 - **📈 Progress:** XP/levels, streaks, practice minutes (14-day chart), per-course stars,
   per-skill accuracy, 26 achievements, recent activity, daily goal setting.
   **Export/Import backup** moves the current player's progress between devices (stored in the browser otherwise).
+- **Playback controls:** a timeline under the top bar you can drag (the notes glide along and snap into place
+  when you let go), back to start, ±5 seconds (also ← / →, Home), play/pause. Starting partway through is a
+  practice run: it doesn't count toward stars or best scores, and its result offers to start from the same spot again.
+- **🔖 Saved parts:** save labelled spots in a song or lesson (per player), shown as ticks on the timeline. The 🔖
+  button in the top bar opens a quick menu to jump to a part, loop it (until the next saved part), rename or
+  delete it. All saved parts are listed on the Songs screen and on each song's card, to start right there.
 - **Keyboard view:** hands (practise one hand while the app plays the other), speed, 🥁 metronome
   (accent on beat 1, count-in), sound, note names/fingers with adjustable size (Aa off/S/M/L/XL, saved per player), fullscreen.
 
