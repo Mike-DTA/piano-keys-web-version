@@ -117,7 +117,7 @@ let profiles=loadProfiles();
 if(!profiles.list.some(p=>p.id===profiles.active)) profiles.active=profiles.list[0].id;
 const me=()=>profiles.list.find(p=>p.id===profiles.active);
 function saveProfiles(){ try{ localStorage.setItem(IKEY, JSON.stringify(profiles)); }catch(e){} }
-function blankProg(){ return {v:1, xp:0, lessons:{}, songs:{}, marks:{}, days:{}, skills:{}, ach:{}, counts:{drills:0,ear:0,sessions:0,runs:0,trainer:0,bestCombo:0}, history:[], bestDays:0, settings:{goal:10, sessionMin:10, drillMode:'wait'}, created:Date.now()}; }
+function blankProg(){ return {v:1, xp:0, lessons:{}, songs:{}, marks:{}, heat:{}, days:{}, skills:{}, ach:{}, counts:{drills:0,ear:0,sessions:0,runs:0,trainer:0,bestCombo:0}, history:[], bestDays:0, settings:{goal:10, sessionMin:10, drillMode:'wait'}, created:Date.now()}; }
 function loadProg(id=profiles.active){
   try{ const p=JSON.parse(localStorage.getItem(progKey(id))); if(p && p.v){ const b=blankProg(); return Object.assign(b,p,{counts:Object.assign(b.counts,p.counts), settings:Object.assign(b.settings,p.settings)}); } }catch(e){}
   const p=blankProg();
@@ -239,6 +239,7 @@ const wants=n=> mode!=='listen' && (hands==='both' || (hands==='right')===(n.han
 /* ---------- Song loading ---------- */
 function loadSong(s){
   if(rec && !rp && !rec.loading) stopRecording(false);   // another song: keep what was recorded so far
+  heatCommit();
   song=s; together=!!s.together;
   const split=s.split||60;
   const fold=m=>{ while(m<21) m+=12; while(m>108) m-=12; return m; };   // beyond the 88 keys: the nearest octave that exists
@@ -254,9 +255,10 @@ function loadSong(s){
   while(b-a<24){ if(a>36) a-=12; else b+=12; }
   setRange(a,b);
   loop=null; scrub=null;
-  restart(); renderTimeline();
+  restart(); heatStart(); renderTimeline();
 }
 function restart(){
+  heatCommit();
   for(const n of notes){ n.hit=false; n.missed=false; n.auto=false; n.req=wants(n); }
   for(const g of groups){ g.wrong=0; g.reveal=false; }
   gi=0; si=0; t=-LEAD; playing=false; finished=false; waiting=false; lastBeat=null; partial=false;
@@ -266,6 +268,7 @@ function restart(){
 }
 /* Jump to song time T: notes before it count as played (not scored), the score starts again from here */
 function seekTo(T){
+  heatCommit();
   t=Math.max(-LEAD, Math.min(T, songEnd));
   for(const n of notes){ n.missed=false; n.auto=false; n.req=wants(n); n.hit = n.start < t-1e-3; }
   for(const g of groups){ g.wrong=0; g.reveal=false; }
@@ -360,7 +363,7 @@ function noteOn(m, src, vel=90){
     for(const n of notes){ if(n.start>t+WIN) break; if(n.req && n.midi===m && !n.hit && !n.missed){ const d=Math.abs(n.start-t); if(d<=bd){ bd=d; best=n; } } }
     if(best){ score(best); ok=true; } else ok=false;
   }
-  if(ok===false){ stats.wrong++; stats.streak=0; }
+  if(ok===false){ stats.wrong++; stats.streak=0; heatMiss(t); }
   stats.bestStreak=Math.max(stats.bestStreak,stats.streak);
   held.set(m,ok); updateHud();
   if(rec && (rec.free || playing)){ recClock(); recOff(m); rec.open.set(m,[rec.w,0,m,vel,ok]); }
@@ -416,7 +419,7 @@ function step(dt){
     if(waiting) nt=g.start;
   } else waiting=false;
   if(mode==='play'){
-    for(const n of notes){ if(n.start>nt) break; if(n.req && !n.hit && !n.missed && nt>n.start+WIN){ n.missed=true; stats.miss++; stats.streak=0; } }
+    for(const n of notes){ if(n.start>nt) break; if(n.req && !n.hit && !n.missed && nt>n.start+WIN){ n.missed=true; stats.miss++; stats.streak=0; heatMiss(n.start); } }
   }
   if(metroOn && nt<songEnd){
     const bi=Math.floor((nt+1e-6)/songBeat);
@@ -428,6 +431,7 @@ function step(dt){
     else if(mode==='play' && soundOn) tone(n.midi,n.dur/speed,0.4);
   }
   t=nt;
+  if(heatRun && t>=0 && mode!=='listen') heatRun.seen.add(Math.min(heatRun.n-1, Math.floor(t/heatRun.bin)));
   if(loop && t>=loop.b-1e-3){ loop.n++; seekTo(loopStart()); return; }   // play the saved part again
   if(t>songEnd+0.8 && (mode!=='wait' || gi>=groups.length)) finish();
   updateHud();
@@ -491,7 +495,7 @@ function recordRun(acc){
 }
 
 function finish(){
-  playing=false; finished=true; releaseWake(); flushTime(); updateUI();
+  playing=false; finished=true; releaseWake(); flushTime(); heatCommit(); updateUI();
   if(previewPhase){
     previewPhase=false; mode=song.mode; $('#mode').value=mode; restart();
     toast('👂 Your turn: play it back!');
@@ -1039,6 +1043,7 @@ function renderTimeline(){   // song length, saved-part ticks and the looped par
   const at=x=>(songEnd>0?Math.max(0,Math.min(100,100*x/songEnd)):0).toFixed(2)+'%';
   $('#tlMarks').innerHTML=marksFor(markKey()).map((m,i)=>`<span class="tmark" data-i="${i}" style="left:${at(m.t)}" title="${esc(m.label)} · ${fmtTime(m.t)}"></span>`).join('');
   $('#tlMarks').querySelectorAll('.tmark').forEach(el=>el.onpointerdown=e=>{ e.stopPropagation(); jumpToMark(+el.dataset.i); });
+  $('#tlTrack').style.background=heatGradient(markKey());
   const lp=$('#tlLoop'); lp.hidden=!loop;
   if(loop){ lp.style.left=at(loop.a); lp.style.width=`calc(${at(Math.min(loop.b,songEnd))} - ${at(loop.a)})`; }
 }
@@ -1239,6 +1244,7 @@ async function showSong(e){
     ${d.both?`<div class="seg" id="sgHands"><button data-h="right">Right hand</button><button data-h="left">Left hand</button><button data-h="both">Both hands</button></div><br>`:''}
     <div class="seg" id="sgMode"><button data-m="wait">⏸ Wait for me</button><button data-m="play">⏱ Play along</button></div>
     ${marksFor(e.id).length?`<div class="meta">🔖 Saved parts:</div><div class="marks">${marksFor(e.id).map((m,i)=>`<button class="mk" data-i="${i}">▶ <b>${esc(m.label)}</b> <small class="muted">${fmtTime(m.t)}</small></button>`).join('')}</div>`:''}
+    ${heatHTML(e.id)}
     ${M&&M.tracks.length>1?`<div class="meta">Instruments to play:</div><div class="tracks">${M.tracks.map(t=>`<label><input type="checkbox" data-t="${t.index}"${M.on.includes(t.index)?' checked':''}> ${esc(t.name)} <small>(${t.count})</small></label>`).join('')}</div>`:''}
     <div class="btns"><button class="primary" id="sgStart">▶ Start</button><button id="sgListen">👂 Listen</button><button id="sgTrain">⚡ Speed trainer</button><button id="sgBack">Back</button>${M?'<button id="sgDel" class="danger">Remove</button>':''}</div>`;
   const seg=(id,key,get,set)=>{ const el=$(id); if(!el) return; const sync=()=>el.querySelectorAll('button').forEach(b=>b.classList.toggle('on',b.dataset[key]===get())); el.querySelectorAll('button').forEach(b=>b.onclick=()=>{ set(b.dataset[key]); sync(); }); sync(); };
@@ -1249,6 +1255,7 @@ async function showSong(e){
   $('#sgTrain').onclick=()=>startTrainer(songItem(e));
   $('#sgBack').onclick=()=>{ $('#intro').hidden=true; };
   card.querySelectorAll('.mk').forEach(b=>b.onclick=()=>startAtMark(e.id,+b.dataset.i));
+  bindHeat(card,e.id);
   if(M){
     $('#sgTitle').onchange=ev=>{ const t=ev.target.value.trim(); if(!t) return; M.title=e.title=e.def.title=t; saveMySong(M); renderSongList(); };
     card.querySelectorAll('.tracks input').forEach(cb=>cb.onchange=()=>{
@@ -1552,6 +1559,7 @@ function showIntro(L, it, reread=false){
     <h2>${esc(L.title)}</h2>${L.text.map(p=>`<p>${p}</p>`).join('')}
     <div class="mini">${miniKeyboard(L)}</div>
     ${theoryHTML(L)}
+    ${heatHTML('lesson:'+L.id)}
     ${L.both?`<div class="seg" id="introHands"><button data-h="right">Right hand</button><button data-h="left">Left hand</button><button data-h="both">Both hands</button></div>`:''}
     <div class="meta">${L.mode==='play'?'⏱ Play along: the music keeps going.':'⏸ Wait for me: the music waits for you.'}${L.metro?' 🥁 Metronome on.':''} Numbers are finger numbers. Pass with ${PASS}%.${best(L.id)?` Your best: ${best(L.id)}%.`:''}</div>
     <div class="btns"><button class="primary" id="introStart">${reread?'↺ Start again':'▶ Start'}</button><button id="introListen">👂 Listen first</button><button id="introBack">${reread?'Close':inSession?'Skip':'Lessons'}</button></div>`;
@@ -1561,6 +1569,7 @@ function showIntro(L, it, reread=false){
     seg.querySelectorAll('button').forEach(b=>b.onclick=()=>{ setHands(b.dataset.h); sync(); });
     sync();
   }
+  bindHeat(card,'lesson:'+L.id);
   $('#introStart').onclick=()=>startItem(it,false);
   $('#introListen').onclick=()=>startItem(it,true);
   $('#introBack').onclick=()=>{ if(reread) $('#intro').hidden=true; else if(inSession){ session.idx++; sessionCard(null); } else openScreen('learn'); };
@@ -1701,6 +1710,66 @@ function bindRecordings(){
   bind('.rdl',el=>downloadRec(byId(el.dataset.id)));
   bind('.rdel',async el=>{ const r=byId(el.dataset.id); if(!confirm(`Delete the recording “${r.title}” from ${new Date(r.at).toLocaleString()}?`)) return;
     await dbDo(true,st=>st.delete(r.id),'recordings'); recs.splice(recs.indexOf(r),1); renderSongs(); toast('Recording deleted'); });
+}
+
+
+/* =====================================================================
+   Mistake heatmap: where in a song or lesson mistakes happen (per player)
+   prog.heat[key] = {bin: seconds per slice (about a bar), n: slices, v: mistakes per play (recent plays count most), p: plays}
+   ===================================================================== */
+let heatRun=null;   // this run: {key, bin, n, err:{slice: count}, seen: slices played}
+function heatStart(){
+  const k=markKey();
+  if(!k || !notes.length || rp){ heatRun=null; return; }
+  const bin=Math.max(Math.min(4, Math.max(1, songBeat*meter)), songEnd/100);   // about one bar, at most 100 slices
+  heatRun={key:k, bin, n:Math.max(1,Math.ceil(songEnd/bin)), err:{}, seen:new Set()};
+}
+function heatMiss(at){
+  if(!heatRun || rp || mode==='listen' || at<0) return;
+  const i=Math.min(heatRun.n-1, Math.floor(at/heatRun.bin));
+  heatRun.err[i]=(heatRun.err[i]||0)+1; heatRun.seen.add(i);
+}
+function heatCommit(){   // fold this run's mistakes into the per-song heatmap
+  const R=heatRun; if(!R || !R.seen.size) return;
+  let H=prog.heat[R.key];
+  if(!H || H.n!==R.n || Math.abs(H.bin-R.bin)>1e-3) H=prog.heat[R.key]={bin:+R.bin.toFixed(3), n:R.n, v:Array(R.n).fill(0), p:Array(R.n).fill(0)};
+  for(const i of R.seen){ const e=R.err[i]||0; H.v[i]=+(H.p[i] ? H.v[i]*0.65+e*0.35 : e).toFixed(2); H.p[i]++; }
+  R.seen=new Set(); R.err={}; saveProg();
+  if(R.key===markKey()) renderTimeline();
+}
+function heatSpots(H,count=3){   // the worst parts, not right next to each other
+  const order=H.v.map((v,i)=>({v,i})).filter(x=>x.v>=0.3 && H.p[x.i]).sort((a,b)=>b.v-a.v), out=[];
+  for(const x of order){ if(out.every(o=>Math.abs(o.i-x.i)>1)) out.push(x); if(out.length===count) break; }
+  return out;
+}
+function heatGradient(k){   // tints the timeline red where the mistakes are
+  const H=k&&prog.heat[k]; if(!H || !H.v.some(v=>v>0)) return '';
+  const max=Math.max(...H.v,1), stops=H.v.map((v,i)=>{ const c=`rgba(255,92,122,${(0.75*v/max).toFixed(2)})`; return `${c} ${(100*i/H.n).toFixed(2)}%, ${c} ${(100*(i+1)/H.n).toFixed(2)}%`; });
+  return `linear-gradient(to right, ${stops.join(', ')}), var(--panel2)`;
+}
+function heatHTML(k){
+  const H=prog.heat[k], played=H && H.p.some(x=>x);
+  let body;
+  if(!played) body='<p class="muted">Play this a few times and the parts where you make mistakes light up here, so you can practise just those.</p>';
+  else{
+    const max=Math.max(...H.v,0.5), spots=heatSpots(H), at=i=>fmtTime(i*H.bin);
+    body=`<div class="heatbar">${H.v.map((v,i)=>`<button class="hc" data-i="${i}" style="--h:${(v/max).toFixed(2)}"${H.p[i]?'':' data-none'} title="${at(i)}–${at(i+1)}: ${H.p[i]?`${v.toFixed(1)} mistakes per play`:'not played yet'}"></button>`).join('')}</div>
+      <div class="heatax"><span>0:00</span><span>${fmtTime(H.n*H.bin)}</span></div>
+      ${spots.length ? `<div class="marks">${spots.map(x=>`<button class="hs" data-i="${x.i}">🔥 ${at(x.i)} · ${x.v.toFixed(1)} per play</button>`).join('')}</div><p class="muted small">Tap a spot or a slice to loop that part.</p>`
+                     : '<p class="muted">No trouble spots right now. Nice work!</p>'}`;
+  }
+  return `<details class="heat"${played?' open':''}><summary>📊 Where you make mistakes</summary>${body}</details>`;
+}
+function bindHeat(root,k){ root.querySelectorAll('.hc,.hs').forEach(b=>b.onclick=()=>practiseSpot(k,+b.dataset.i)); }
+async function practiseSpot(k,i){   // open the song or lesson and loop the part around slice i
+  const H=prog.heat[k]; if(!H) return;
+  let it;
+  if(k.startsWith('lesson:')) it=lessonItem(LESSON[k.slice(7)]);
+  else{ const e=songById(k); if(!e) return; try{ await songDef(e); }catch(err){ return toast('⚠ '+err.message); } e.def.mode=prog.settings.songMode||'wait'; it=songItem(e); }
+  session=null; trainer=null; startItem(it);
+  const a=Math.max(0,i-1)*H.bin, b=Math.min(songEnd+0.8,(i+2)*H.bin);
+  loop={a, b, label:`Trouble spot ${fmtTime(i*H.bin)}`, n:1};
+  renderTimeline(); seekTo(loopStart()); updateUI();
 }
 
 /* =====================================================================

@@ -69,6 +69,10 @@ Connect the piano with a USB-OTG cable and allow MIDI access.
 - **🔖 Saved parts:** save labelled spots in a song or lesson (per player), shown as ticks on the timeline. The 🔖
   button in the top bar opens a quick menu to jump to a part, loop it (until the next saved part), rename or
   delete it. All saved parts are listed on the Songs screen and on each song's card, to start right there.
+- **📊 Where you make mistakes:** every song card and lesson intro has a heatmap of the song, about one slice per bar,
+  coloured by how many mistakes you make there (wrong keys, and missed notes in Play along). Recent plays count most,
+  so parts you've fixed cool down. Tap a slice or one of the top trouble spots to loop that part. The heat also tints
+  the timeline while you play. Kept per player.
 - **🎙 Recordings:** press the record button in the top bar to record yourself, in a song (it starts the song)
   or in free play. Stopping (or the song ending) saves the take for the current player on this device. Replay it
   with the same timing and touch: keys light up green/red as you played them, and in a song the notes move just
