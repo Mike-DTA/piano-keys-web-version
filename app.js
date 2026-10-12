@@ -215,7 +215,7 @@ const $=s=>document.querySelector(s);
 const cv=$('#cv'), cx=cv.getContext('2d');
 const css=getComputedStyle(document.documentElement), col=k=>css.getPropertyValue(k).trim();
 const C={bg:col('--bg'),accent:col('--accent'),left:col('--left'),good:col('--good'),bad:col('--bad'),muted:col('--muted'),text:col('--text')};
-const OTHER='#4a5070';           // notes the app plays for the hand you're not practising
+const OTHER='#4a5070';           // hidden notes in play-by-ear drills
 
 let song=null, notes=[], groups=[], gi=0, si=0, songEnd=0, songBeat=0.5, meter=4, lastBeat=null;
 let t=-LEAD, playing=false, finished=false, waiting=false, mode='wait', speed=1, hands='both';
@@ -240,7 +240,8 @@ const wants=n=> mode!=='listen' && (hands==='both' || (hands==='right')===(n.han
 function loadSong(s){
   song=s; together=!!s.together;
   const split=s.split||60;
-  notes = s.notes.map(n=>({...n, hand:n.hand||(n.midi<split?'L':'R')})).sort((a,b)=>a.start-b.start||a.midi-b.midi);
+  const fold=m=>{ while(m<21) m+=12; while(m>108) m-=12; return m; };   // beyond the 88 keys: the nearest octave that exists
+  notes = s.notes.map(n=>({...n, midi:fold(n.midi), hand:n.hand||(n.midi<split?'L':'R')})).sort((a,b)=>a.start-b.start||a.midi-b.midi);
   groups=[];
   for(const n of notes){ let g=groups[groups.length-1]; if(!(g && n.start-g.start<0.06)){ g={start:n.start, notes:[]}; groups.push(g); } g.notes.push(n); n.g=g; }
   songEnd = notes.reduce((m,n)=>Math.max(m,n.start+n.dur),0);
@@ -845,6 +846,11 @@ function setSpeed(s){ speed=s; $('#speed').value=String(s); }
    Drawing
    ===================================================================== */
 function rrect(x,y,w,h,r){ cx.beginPath(); if(cx.roundRect) cx.roundRect(x,y,w,h,Math.min(r,h/2,w/2)); else cx.rect(x,y,w,h); cx.fill(); }
+function rline(x,y,w,h,r,col,lw){   // rounded outline, drawn just inside the shape
+  x+=lw/2; y+=lw/2; w-=lw; h-=lw; if(w<=0||h<=0) return;
+  cx.beginPath(); if(cx.roundRect) cx.roundRect(x,y,w,h,Math.max(0,Math.min(r,h/2,w/2))); else cx.rect(x,y,w,h);
+  cx.lineWidth=lw; cx.strokeStyle=col; cx.stroke();
+}
 function draw(){
   cx.fillStyle=C.bg; cx.fillRect(0,0,W,H);
   for(let m=lo;m<=hi;m++){
@@ -865,15 +871,20 @@ function draw(){
       cx.globalAlpha=1; cx.fillStyle=C.text; cx.font='700 14px system-ui,sans-serif'; if(yb-yt>16) cx.fillText('?',W/2,yb-3);
       continue;
     }
-    const other = mode!=='listen' && !n.req;
-    let fill = other ? OTHER : (n.hand==='L' ? C.left : C.accent);
-    if(!other && n.hit) fill=C.good; else if(n.missed) fill=C.bad;
-    cx.globalAlpha = n.missed ? 0.45 : other ? 0.6 : 1;
-    cx.fillStyle=fill; rrect(r.x+1.5,yt,r.w-3,Math.max(4,yb-yt),5);
+    const other = mode!=='listen' && !n.req, handFill = n.hand==='L' ? C.left : C.accent;
+    const nw=Math.max(r.w-3,7), nx=r.x+r.w/2-nw/2, nh=Math.max(4,yb-yt);   // black-key notes never get thinner than 7 px
+    if(other){   // the hand the app plays for you: see-through, with a solid outline in that hand's colour
+      cx.globalAlpha=0.28; cx.fillStyle=handFill; rrect(nx,yt,nw,nh,5);
+      cx.globalAlpha=0.9; rline(nx,yt,nw,nh,5,handFill,1.5);
+    } else {
+      cx.globalAlpha = n.missed ? 0.45 : 1;
+      cx.fillStyle = n.hit ? C.good : n.missed ? C.bad : handFill; rrect(nx,yt,nw,nh,5);
+      if(r.black){ cx.globalAlpha=1; rline(nx,yt,nw,nh,5,'rgba(10,12,22,.85)',1.5); }   // keeps black-key notes apart from their neighbours
+    }
     cx.globalAlpha=1;
-    if(labelScale && r.w>=14){   // note name at the bottom of the note, finger number above it, shrunk to fit narrow keys
-      const fit=(txt,size,weight)=>{ cx.font=`${weight} ${size}px system-ui,sans-serif`; const w=cx.measureText(txt).width; if(w>r.w-3){ size=Math.floor(size*(r.w-3)/w); cx.font=`${weight} ${size}px system-ui,sans-serif`; } return size; };
-      cx.fillStyle='rgba(10,12,22,.8)';
+    if(labelScale && nw>=11){   // note name at the bottom of the note, finger number above it, shrunk to fit narrow keys
+      const fit=(txt,size,weight)=>{ cx.font=`${weight} ${size}px system-ui,sans-serif`; const w=cx.measureText(txt).width; if(w>nw){ size=Math.floor(size*nw/w); cx.font=`${weight} ${size}px system-ui,sans-serif`; } return size; };
+      cx.fillStyle = other ? C.text : 'rgba(10,12,22,.8)';
       const nm=NAMES[n.midi%12], s1=fit(nm,Math.round(11*labelScale),600);
       if(yb-yt>s1+5){
         cx.fillText(nm,r.x+r.w/2,yb-3);
