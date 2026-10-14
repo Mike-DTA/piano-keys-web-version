@@ -130,6 +130,13 @@ function openInKeys(bytes, title){
 ```
 Passing the name `'keys'` reuses the same Keys tab for every song.
 
+**Bookmarks** become saved parts of the song, for every player (each player's changes stay their own). Keys reads
+them from the MIDI file: every marker (meta event `FF 06`, the name) is one, and a sequencer-specific event
+(`FF 7F`, data `7D 'M' 'C' 'B' 'M' r g b`, as MIDI-Creator writes) right after it at the same tick gives its color.
+Markers from other programs come through too. A link can also send them as `&bm=` plus URI-encoded JSON,
+`[{"t":12.5,"n":"Chorus","c":"#60a5fa"}]` with `t` in seconds from the start of the file; that's used only when the
+file has no markers.
+
 ## Adding lessons
 Add an entry to a course in `COURSES` (content.js), its id to `PATH`, and its theory to `THEORY`
 (`{learn:[…], practice:[…], watch:[…]}`, shown under Learn more):
