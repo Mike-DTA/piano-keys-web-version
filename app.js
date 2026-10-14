@@ -61,7 +61,7 @@ function parseMidiFile(buf){
   if(str(4)!=='MThd') throw new Error('Not a MIDI file');
   const hlen=u32(); u16(); const ntr=u16(), div=u16(); p = 8+hlen;
   if(div & 0x8000) throw new Error('SMPTE-timed MIDI files are not supported');
-  const tempos=[{tick:0,usq:500000}], raw=[], tracks=[]; let ts=null;
+  const tempos=[{tick:0,usq:500000}], raw=[], tracks=[], marks=[]; let ts=null;
   for(let ti=0; p+8<=v.byteLength && tracks.length<ntr; ti++){
     const id=str(4), len=u32(), end=Math.min(p+len, v.byteLength);
     if(id!=='MTrk'){ p=end; continue; }
@@ -75,6 +75,10 @@ function parseMidiFile(buf){
         if(type===0x03 && !name){ name=str(l).replace(/[^\x20-\x7e]/g,'').trim(); continue; }
         if(type===0x58 && !ts) ts={n:v.getUint8(p), d:2**v.getUint8(p+1)};
         if(type===0x51) tempos.push({tick, usq:(v.getUint8(p)<<16)|(v.getUint8(p+1)<<8)|v.getUint8(p+2)});
+        if(type===0x06) marks.push({tick, label:new TextDecoder().decode(new Uint8Array(buf,p,Math.min(l,end-p))).replace(/\0/g,'').trim().slice(0,40)||'Marker'});   // marker: becomes a saved part
+        if(type===0x7f && l===8 && String.fromCharCode(...new Uint8Array(buf,p,5))==='\x7dMCBM'){   // MIDI-Creator bookmark color for the marker just before it
+          const m=marks[marks.length-1]; if(m && m.tick===tick) m.c='#'+[5,6,7].map(i=>v.getUint8(p+i).toString(16).padStart(2,'0')).join('');
+        }
         p += l;
       } else if(st===0xf0 || st===0xf7){ p += vlq(); }
       else {
@@ -95,7 +99,16 @@ function parseMidiFile(buf){
   const first = notes.length ? Math.min(...notes.map(n=>n.start)) : 0;
   notes.forEach(n=>n.start-=first);
   const t0 = tempos.filter(t=>t.tick===0).pop();
-  return {tracks:tracks.filter(t=>t.count>0), notes, beat:t0.usq/1e6, ts};
+  return {tracks:tracks.filter(t=>t.count>0), notes, beat:t0.usq/1e6, ts, lead:first,
+          marks:cleanMarks(marks.map(m=>({t:toSec(m.tick), label:m.label, c:m.c})), first)};
+}
+/* Bookmarks from MIDI-Creator (markers in the file, or &bm= in the link) are in seconds from the start of the file;
+   songs start at their first note, so they move back by that much. */
+function cleanMarks(list, lead=0){
+  return (Array.isArray(list)?list:[]).filter(m=>m && isFinite(m.t) && m.t>=0)
+    .map(m=>Object.assign({t:+Math.max(0,m.t-lead).toFixed(2), label:String(m.label==null?'Bookmark':m.label).trim().slice(0,40)||'Bookmark'},
+                          /^#[0-9a-f]{6}$/i.test(m.c) ? {c:m.c.toLowerCase()} : {}))
+    .sort((a,b)=>a.t-b.t);
 }
 
 /* ---------- Content index ---------- */
@@ -1041,7 +1054,7 @@ function updateTimeline(){
 function renderTimeline(){   // song length, saved-part ticks and the looped part
   tlShown=''; $('#tDur').textContent=fmtTime(rp?rp.r.dur:songEnd);
   const at=x=>(songEnd>0?Math.max(0,Math.min(100,100*x/songEnd)):0).toFixed(2)+'%';
-  $('#tlMarks').innerHTML=marksFor(markKey()).map((m,i)=>`<span class="tmark" data-i="${i}" style="left:${at(m.t)}" title="${esc(m.label)} · ${fmtTime(m.t)}"></span>`).join('');
+  $('#tlMarks').innerHTML=marksFor(markKey()).map((m,i)=>`<span class="tmark" data-i="${i}" style="left:${at(m.t)}${m.c?';--mc:'+m.c:''}" title="${esc(m.label)} · ${fmtTime(m.t)}"></span>`).join('');
   $('#tlMarks').querySelectorAll('.tmark').forEach(el=>el.onpointerdown=e=>{ e.stopPropagation(); jumpToMark(+el.dataset.i); });
   $('#tlTrack').style.background=heatGradient(markKey());
   const lp=$('#tlLoop'); lp.hidden=!loop;
@@ -1233,8 +1246,9 @@ function renderSongs(){
   bindRecordings();
 }
 function savedPartsHTML(){   // every saved part of this player, in songs and lessons
-  const all=Object.keys(prog.marks).flatMap(k=>{ const title=markTitle(k); return title ? prog.marks[k].map((m,i)=>({k,i,m,title})) : []; });
-  return all.length ? `<h2 class="sec">🔖 Your saved parts</h2><div class="marks">${all.map(x=>`<button class="mk" data-k="${esc(x.k)}" data-i="${x.i}">▶ ${esc(x.title)} · <b>${esc(x.m.label)}</b> <small class="muted">${fmtTime(x.m.t)}</small></button>`).join('')}</div>` : '';
+  const keys=new Set([...Object.keys(prog.marks), ...myEntries().filter(e=>e.mine.marks&&e.mine.marks.length).map(e=>e.id)]);
+  const all=[...keys].flatMap(k=>{ const title=markTitle(k); return title ? marksFor(k).map((m,i)=>({k,i,m,title})) : []; });
+  return all.length ? `<h2 class="sec">🔖 Your saved parts</h2><div class="marks">${all.map(x=>`<button class="mk" data-k="${esc(x.k)}" data-i="${x.i}">${markDot(x.m)}▶ ${esc(x.title)} · <b>${esc(x.m.label)}</b> <small class="muted">${fmtTime(x.m.t)}</small></button>`).join('')}</div>` : '';
 }
 let songBase=[];
 function renderSongList(){
@@ -1265,7 +1279,7 @@ async function showSong(e){
     <div class="meta">${fmtTime(len)} at full speed · ${d.both?'both hands':'one hand'}${r?` · best ${r.best}% · played ${r.plays}×`:''}</div>
     ${d.both?`<div class="seg" id="sgHands"><button data-h="right">Right hand</button><button data-h="left">Left hand</button><button data-h="both">Both hands</button></div><br>`:''}
     <div class="seg" id="sgMode"><button data-m="wait">⏸ Wait for me</button><button data-m="play">⏱ Play along</button></div>
-    ${marksFor(e.id).length?`<div class="meta">🔖 Saved parts:</div><div class="marks">${marksFor(e.id).map((m,i)=>`<button class="mk" data-i="${i}">▶ <b>${esc(m.label)}</b> <small class="muted">${fmtTime(m.t)}</small></button>`).join('')}</div>`:''}
+    ${marksFor(e.id).length?`<div class="meta">🔖 Saved parts:</div><div class="marks">${marksFor(e.id).map((m,i)=>`<button class="mk" data-i="${i}">${markDot(m)}▶ <b>${esc(m.label)}</b> <small class="muted">${fmtTime(m.t)}</small></button>`).join('')}</div>`:''}
     ${heatHTML(e.id)}
     ${M&&M.tracks.length>1?`<div class="meta">Instruments to play:</div><div class="tracks">${M.tracks.map(t=>`<label><input type="checkbox" data-t="${t.index}"${M.on.includes(t.index)?' checked':''}> ${esc(t.name)} <small>(${t.count})</small></label>`).join('')}</div>`:''}
     <div class="btns"><button class="primary" id="sgStart">▶ Start</button><button id="sgListen">👂 Listen</button><button id="sgTrain">⚡ Speed trainer</button><button id="sgBack">Back</button>${M?'<button id="sgDel" class="danger">Remove</button>':''}</div>`;
@@ -1335,18 +1349,24 @@ const meterOf=(ts,q)=> !ts ? {meter:4, beat:q} : ts.d===8 && ts.n%3===0 ? {meter
 
 const hashBytes=u8=>{ let h=0x811c9dc5; for(let i=0;i<u8.length;i++){ h^=u8[i]; h=Math.imul(h,16777619); } return (h>>>0).toString(16)+'-'+u8.length; };
 let afterWho=null;   // something to show once a player has been picked
-async function importFiles(files){
+async function importFiles(files, bm){   // bm: bookmarks sent with a link, used when the file has none of its own
   await loadMySongs();
   if(!mySongs) return alert('My songs can\'t be opened right now because another Keys window is still open with an older version. Close the other Keys tabs (or the installed app) and try again.');
   const added=[]; let dups=0;
   for(const f of files){
     try{
       const buf=await f.arrayBuffer(), b=new Uint8Array(buf,0,4), sig=String.fromCharCode(...b), hash=hashBytes(new Uint8Array(buf));
-      const dup=mySongs.find(r=>r.hash===hash); if(dup){ added.push(dup); dups++; continue; }   // same file again: open the copy we have
-      const p = sig==='MThd' ? parseMidiFile(buf) : parseMusicXML(sig==='PK\x03\x04' ? await unzipMusicXML(buf) : new TextDecoder().decode(buf));
+      const p0=()=> sig==='MThd' ? parseMidiFile(buf) : null;
+      const marksOf=p=> p && p.marks.length ? p.marks : cleanMarks(bm, p?p.lead:0);
+      const dup=mySongs.find(r=>r.hash===hash);
+      if(dup){   // same file again: open the copy we have (added before bookmarks existed? pick them up now)
+        if(!dup.marks || (!dup.marks.length && bm && bm.length)){ dup.marks=marksOf(p0()); saveMySong(dup); }
+        added.push(dup); dups++; continue;
+      }
+      const p = p0() || parseMusicXML(sig==='PK\x03\x04' ? await unzipMusicXML(buf) : new TextDecoder().decode(buf));
       if(!p.notes.length) throw new Error('no notes found');
       const r={id:Date.now().toString(36)+Math.random().toString(36).slice(2,6), title:p.title||f.name.replace(/\.[^.]+$/,''), by:p.by||'', file:f.name, added:Date.now(), hash,
-               tracks:p.tracks, on:p.tracks.map(t=>t.index), notes:p.notes, ...meterOf(p.ts,p.beat)};
+               tracks:p.tracks, on:p.tracks.map(t=>t.index), notes:p.notes, marks:marksOf(p.marks?p:null), ...meterOf(p.ts,p.beat)};
       await dbDo(true,st=>st.put(r)); mySongs.push(r); added.push(r);
     }catch(err){ alert(`Could not add ${f.name}: ${err.message}`); }
   }
@@ -1359,17 +1379,19 @@ async function importFiles(files){
 /* Songs sent by link, e.g. from a MIDI converter:
      Keys/#midi=<the .mid file in base64 or base64url>&title=Song name
      Keys/#midi=https://example.com/song.mid   (the host must allow cross-origin downloads)
+     &bm=[{"t":12.5,"n":"Chorus","c":"#60a5fa"},…]   bookmarks (seconds from the start of the file), used if the file has no markers
    Data after # never leaves the browser, so no server is needed. ?midi=… works too, for short values. */
 async function importFromLink(){
   const h=new URLSearchParams(location.hash.slice(1)), q=new URLSearchParams(location.search), v=h.get('midi')||q.get('midi');
   if(!v) return;
   const title=(h.get('title')||q.get('title')||'Linked song').trim();
+  let bm=[]; try{ bm=JSON.parse(h.get('bm')||q.get('bm')||'[]').map(b=>({t:b.t, label:b.n, c:b.c})); }catch(e){}
   history.replaceState(null,'',location.pathname);   // so a reload doesn't import it again
   try{
     let bytes;
     if(/^https?:\/\//i.test(v)){ const r=await fetch(v); if(!r.ok) throw new Error('download failed ('+r.status+')'); bytes=await r.arrayBuffer(); }
     else{ const b=atob(v.replace(/ /g,'+').replace(/-/g,'+').replace(/_/g,'/')); bytes=Uint8Array.from(b,c=>c.charCodeAt(0)); }
-    await importFiles([new File([bytes], title.replace(/[\\/:*?"<>|]+/g,'_')+'.mid')]);
+    await importFiles([new File([bytes], title.replace(/[\\/:*?"<>|]+/g,'_')+'.mid')], bm);
   }catch(err){ alert('Could not open the linked song: '+(err.message||err)); }
 }
 
@@ -1798,7 +1820,11 @@ async function practiseSpot(k,i){   // open the song or lesson and loop the part
    Saved parts: labelled spots in a song or lesson, per player
    ===================================================================== */
 function markKey(c=cur){ return c ? (c.song ? c.song.id : c.lesson ? 'lesson:'+c.lesson.id : null) : null; }   // drills are new every time
-function marksFor(k){ return (k && prog.marks[k]) || []; }
+/* An imported song's own bookmarks (from MIDI-Creator or the file's markers) are every player's starting parts;
+   the first change gives this player their own copy in prog.marks. */
+function fileMarks(k){ const e=k && k.startsWith('my:') && myMap.get(k.slice(3)); return (e && e.mine.marks) || []; }
+function marksFor(k){ return !k ? [] : prog.marks[k] || fileMarks(k); }
+function ownMarks(k){ return prog.marks[k] || (prog.marks[k]=fileMarks(k).map(m=>({...m}))); }
 function markTitle(k){ if(k.startsWith('lesson:')){ const l=LESSON[k.slice(7)]; return l&&l.title; } const e=self.SONGS&&songById(k); return e&&e.title; }
 function jumpToMark(i){ const m=marksFor(markKey())[i]; if(!m) return; if(loop && loop.a!==m.t){ loop=null; renderTimeline(); } seekAnimated(Math.max(-LEAD, m.t-LEADIN)); }
 function loopMark(i){
@@ -1808,6 +1834,7 @@ function loopMark(i){
   renderTimeline(); seekAnimated(loopStart()); scrub.resume=true; updateUI();
 }
 function saveMarks(){ saveProg(); renderTimeline(); }
+const markDot=m=> m.c ? `<span class="mdot" style="--mc:${m.c}"></span>` : '';   // the bookmark's color from MIDI-Creator
 async function startAtMark(k,i){   // from a menu: open the song or lesson and start just before the part
   const m=marksFor(k)[i]; if(!m) return;
   let it;
@@ -1832,7 +1859,7 @@ function renderMarks(){
                     : '<p class="muted">Saved parts work in songs and lessons. Open one, find the spot on the timeline, then save it here.</p>';
   else body=(L.length ? L.map((m,i)=> i===markEdit
       ? `<div class="mrow"><input id="mRename" maxlength="40" value="${esc(m.label)}"><button class="primary" data-a="ren" data-i="${i}">Save</button></div>`
-      : `<div class="mrow"><button class="mgo ic" data-a="go" data-i="${i}">${ICON.play}<b>${esc(m.label)}</b><small>${fmtTime(m.t)}</small></button>`+
+      : `<div class="mrow"><button class="mgo ic" data-a="go" data-i="${i}">${markDot(m)}${ICON.play}<b>${esc(m.label)}</b><small>${fmtTime(m.t)}</small></button>`+
         `<button data-a="loop" data-i="${i}" title="Loop this part (until the next saved part)" class="ic${loop&&loop.a===m.t?' on':''}">${ICON.loop}</button>`+
         `<button data-a="edit" data-i="${i}" class="ic" title="Rename" aria-label="Rename">${ICON.edit}</button><button data-a="del" data-i="${i}" class="ic" title="Delete" aria-label="Delete">${ICON.del}</button></div>`).join('')
       : '<p class="muted">No saved parts yet. Move to a spot (drag the timeline or pause) and save it.</p>')+
@@ -1843,16 +1870,16 @@ function renderMarks(){
   const add=MM.querySelector('#mLabel'); if(add) add.onkeydown=e=>{ if(e.key==='Enter') markAction('add'); };
 }
 function markAction(a,i){
-  const k=markKey(), L=marksFor(k);
+  const k=markKey(), L=['ren','del'].includes(a) ? ownMarks(k) : marksFor(k);
   if(a==='close') return closeMarks();
   if(a==='go'){ closeMarks(); return jumpToMark(i); }
   if(a==='loop'){ closeMarks(); return loopMark(i); }
   if(a==='edit'){ markEdit=i; return renderMarks(); }
   if(a==='ren'){ const v=MM.querySelector('#mRename').value.trim(); if(v){ L[i].label=v; if(loop&&loop.a===L[i].t) loop.label=v; saveMarks(); updateUI(); } markEdit=-1; return renderMarks(); }
-  if(a==='del'){ if(loop&&loop.a===L[i].t) loop=null; L.splice(i,1); if(!L.length) delete prog.marks[k]; saveMarks(); updateUI(); return renderMarks(); }
+  if(a==='del'){ if(loop&&loop.a===L[i].t) loop=null; L.splice(i,1); if(!L.length && !fileMarks(k).length) delete prog.marks[k]; saveMarks(); updateUI(); return renderMarks(); }   // kept empty if the song has its own bookmarks, or they'd come back
   if(a==='add' && k){
     const label=MM.querySelector('#mLabel').value.trim()||`Part ${L.length+1}`, at=+Math.max(0,scrub?scrub.target:t).toFixed(2);
-    const list=prog.marks[k]||(prog.marks[k]=[]), same=list.find(m=>Math.abs(m.t-at)<0.05);
+    const list=ownMarks(k), same=list.find(m=>Math.abs(m.t-at)<0.05);
     if(same) same.label=label; else{ list.push({t:at, label}); list.sort((x,y)=>x.t-y.t); }   // same spot: just rename it
     saveMarks();
     toast(`🔖 Saved “${label}” at ${fmtTime(at)}`); closeMarks();
