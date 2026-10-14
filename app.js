@@ -331,7 +331,21 @@ function keyAt(x,y){
 /* ---------- Audio ---------- */
 let ac=null;
 function audio(){ if(!ac) ac=new (window.AudioContext||window.webkitAudioContext)(); if(ac.state==='suspended') ac.resume(); return ac; }
-function tone(m,dur=0.6,vel=0.6){
+/* Realistic piano (fancy-piano.js, from MIDI-Creator): every key is calculated on this device the first time it's
+   switched on, which takes a few seconds; until then, and if it can't be made, the simple sound below plays instead. */
+let fancyOn=false;
+function setFancy(on){
+  fancyOn=on && !!self.FancyPiano;
+  const b=$('#fancy'); b.setAttribute('aria-pressed',fancyOn); b.hidden=!self.FancyPiano;
+  if(!fancyOn || FancyPiano.ready || FancyPiano.busy) return;
+  FancyPiano.prepare(audio(), f=>{ b.textContent='🎹 '+Math.round(f*100)+'%'; }).then(ok=>{
+    b.textContent='🎹';
+    if(!ok){ fancyOn=false; b.setAttribute('aria-pressed',false); toast('⚠ The realistic piano could not be prepared on this device'); }
+    else if(fancyOn) toast('🎹 Realistic piano is ready');
+  });
+}
+function tone(m,dur=0.6,vel=0.6,midiVel){   // vel 0..1 for the simple sound; midiVel (1-127) when the real one is known
+  if(fancyOn && FancyPiano.play(audio(), m, midiVel||Math.round(40+vel*100), dur)) return;
   const a=audio(), f=440*Math.pow(2,(m-69)/12), t0=a.currentTime, len=Math.max(0.25,dur);
   const g=a.createGain();
   g.gain.setValueAtTime(0,t0); g.gain.linearRampToValueAtTime(0.22*vel,t0+0.008);
@@ -1075,8 +1089,9 @@ $('#metro').onclick=e=>{ metroOn=!metroOn; if(!(song&&song.metro)) metroPref=met
 $('#sound').onclick=e=>{ soundOn=!soundOn; e.currentTarget.setAttribute('aria-pressed',soundOn); audio(); };
 const LABEL_SIZES=[[0,'Aa off'],[1,'Aa S'],[1.4,'Aa M'],[1.8,'Aa L'],[2.4,'Aa XL']];
 $('#labels').innerHTML=LABEL_SIZES.map(([v,l])=>`<option value="${v}">${l}</option>`).join('');
-function applyLabels(){ labelScale=prog.settings.labels!=null?prog.settings.labels:1; $('#labels').value=String(labelScale); }   // saved per player
+function applyLabels(){ labelScale=prog.settings.labels!=null?prog.settings.labels:1; $('#labels').value=String(labelScale); setFancy(!!prog.settings.fancy); }   // saved per player (with the realistic piano)
 $('#labels').onchange=e=>{ prog.settings.labels=labelScale=+e.target.value; saveProg(); };
+$('#fancy').onclick=()=>{ prog.settings.fancy=!fancyOn; saveProg(); setFancy(prog.settings.fancy); };
 $('#midi').onclick=connectMidi;
 $('#homeBtn').onclick=()=>{ if(session) sessionSummary(); else openScreen('home'); };
 $('#resCard').onclick=()=>clearCountdown();
@@ -1707,7 +1722,7 @@ function pathAt(path,w){   // song time at replay time w
 }
 function replayTick(silent){
   const r=rp.r, w=rp.w;
-  if(rp.playing && !silent) while(rp.i<r.notes.length && r.notes[rp.i][0]<=w){ const n=r.notes[rp.i++]; tone(n[2], Math.max(0.08,n[1]-n[0]), 0.25+0.45*n[3]/127); }
+  if(rp.playing && !silent) while(rp.i<r.notes.length && r.notes[rp.i][0]<=w){ const n=r.notes[rp.i++]; tone(n[2], Math.max(0.08,n[1]-n[0]), 0.25+0.45*n[3]/127, n[3]); }
   held.clear(); for(const n of r.notes){ if(n[0]>w) break; if(n[1]>w) held.set(n[2], n[4]); }
   if(r.path){ const nt=pathAt(r.path,w); if(nt!==t){ t=nt; si=notes.findIndex(n=>n.start>t); if(si<0) si=notes.length; } }
   if(rp.playing && w>=r.dur){

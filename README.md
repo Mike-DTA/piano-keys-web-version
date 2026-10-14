@@ -83,6 +83,10 @@ Connect the piano with a USB-OTG cable and allow MIDI access.
   under Songs → Your recordings, and can be downloaded as `.mid` files.
 - **Keyboard view:** hands (practise one hand while the app plays the other), speed, 🥁 metronome
   (accent on beat 1, count-in), sound, note names/fingers with adjustable size (Aa off/S/M/L/XL, saved per player), fullscreen.
+- **🎹 Realistic piano:** the button next to 🔊 switches every sound in Keys (your key presses, the song, Listen and
+  replays) to MIDI-Creator's "Fancy" piano: each key, its soundboard, the ringing top strings and a hall are calculated
+  on your device (a few seconds, the first time per visit; nothing is downloaded). Saved per player. The code is in
+  `fancy-piano.js`; its sound maths is copied unchanged from MIDI-Creator, so updates there can be copied over whole.
 
 ## Notation (content.js)
 Tokens separated by spaces; a token is notes joined with `+`, then optional `:beats` to advance (default 1). `R` = rest.
