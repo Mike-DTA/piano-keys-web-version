@@ -27,6 +27,7 @@ DEMO=r"""(async()=>{
   PATH.slice(0,26).forEach((id,i)=>{ prog.lessons[id]={best:[84,93,98,88,100,91][i%6], reps:2, plays:3, last:Date.now()-(i%7)*864e5}; });
   Object.assign(prog.songs,{'ode-to-joy':{best:96,plays:5},'greensleeves':{best:82,plays:4},'jingle-bells':{best:100,plays:6},'twinkle':{best:98,plays:3},'canon-in-d':{best:88,plays:2}});
   Object.assign(prog.skills,{'c-r':{m:94,n:9},'c-l':{m:86,n:6},'black':{m:79,n:4},'rhythm':{m:83,n:7},'chords':{m:88,n:5},'read':{m:72,n:4},'scales':{m:81,n:3},'hands':{m:69,n:3},'songs':{m:91,n:8},'theory':{m:85,n:3}});
+  prog.tests=prog.tests||{}; prog.tests['test:ode-to-joy']={passed:true, best:94};
   prog.counts.sessions=8; prog.counts.drills=31; prog.counts.runs=120; prog.counts.bestCombo=64;
   checkAch(); prog.history=[]; [['Greensleeves','free',82],['Pop chords · Four-chord pop','drill',94],['The pop progression','lesson',91],['Read the note · Both clefs','drill',88],['Ode to Joy','free',96]].forEach(([title,kind,acc],i)=>prog.history.push({at:Date.now()-i*36e5,title,kind,acc,xp:20+i}));
   saveProg(); document.querySelectorAll('.toast').forEach(t=>t.remove());
