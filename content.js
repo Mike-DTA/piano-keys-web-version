@@ -29,6 +29,7 @@ const SKILLS = {
   'songs':  'Playing songs',
   'ear':    'Playing by ear',
   'theory': 'Music theory',
+  'read':   'Reading notes',
 };
 
 /* ---------- Helpers for writing lessons ---------- */

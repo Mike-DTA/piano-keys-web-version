@@ -10,6 +10,7 @@ Falling-notes piano trainer for Chrome on Android, using your digital piano over
 | `songs.js` | Song library (public domain), loaded only when needed |
 | `app.js` | Engine, progress, drills, sessions, screens |
 | `sw.js`, `manifest.json`, icons | Install as an app / offline |
+| `fonts/` | Bravura music font for the staff (SIL Open Font License) |
 
 To update a hosted copy, upload all files (at least `index.html`, `content.js`, `songs.js`, `app.js`, `sw.js`).
 
@@ -57,6 +58,10 @@ Connect the piano with a USB-OTG cable and allow MIDI access.
   - *Review*: spaced repetition, so lessons come back after 1, 2, 4, 7, 14, 30, 60 days (sooner if you slip).
   - *Drills*: randomly generated each time: note finder, chord changes, rhythm reading, scale runs,
     hand coordination, play by ear (notes hidden; key shown after 2 misses), pop chords. Wait or play-along mode.
+  - *Read the note* (🎼): notes on a real grand staff (treble and bass clef) scroll past a playhead. Find each one
+    without hints: a wrong key shows as a red note on the staff, after two tries the key lights up, and played notes
+    turn green with their name. Levels: treble C position, treble white keys, bass C position, bass white keys,
+    both clefs, sharps and flats. In this view the keyboard can be hidden with the keyboard button in the top bar.
   - *Pop chords*: the progressions behind countless hits (I–V–vi–IV, '50s, vi–IV–I–V, three-chord rock,
     Andalusian, 12-bar blues) with right-hand chords and a left-hand bass note, in a random style each time:
     held, four beats, pop rhythm 3+3+2 or broken chords. Shows well-known songs that use each progression.

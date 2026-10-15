@@ -35,7 +35,7 @@ function parseNotation(src,bpm){
       const m = /^([A-G][#b]?-?\d)(?:@(\d))?(?:~([\d.]+))?$/.exec(part);
       if(!m) throw new Error('Bad note: '+part);
       const len = m[3] ? parseFloat(m[3]) : adv;
-      const n = {midi:nameToMidi(m[1]), start:beat*spb, dur:len*spb*0.92, finger:m[2]?+m[2]:undefined};
+      const n = {midi:nameToMidi(m[1]), name:m[1], start:beat*spb, dur:len*spb*0.92, finger:m[2]?+m[2]:undefined};
       if(label && i===0) n.label=label;
       out.push(n);
     });
@@ -302,7 +302,8 @@ function layout(){
   const dpr=window.devicePixelRatio||1;
   W=cv.clientWidth; H=cv.clientHeight;
   cv.width=Math.round(W*dpr); cv.height=Math.round(H*dpr); cx.setTransform(dpr,0,0,dpr,0,0);
-  kbH=Math.max(70,Math.min(H*0.3,180)); kbTop=H-kbH; ww=W/Math.max(1,whites.length);
+  kbH = song && song.view==='staff' && prog.settings.staffKeys===false ? 0 : Math.max(70,Math.min(H*0.3,180));
+  kbTop=H-kbH; ww=W/Math.max(1,whites.length);
 }
 function keyRect(m){
   if(!isBlack(m)){ const i=whiteIdx[m]; return i===undefined?null:{x:i*ww,w:ww,h:kbH,black:false}; }
@@ -355,7 +356,7 @@ function noteOn(m, src, vel=90){
           if(together && need.length>1){ if(need.every(x=>held.has(x.midi))) need.forEach(score); }
           else score(n);
         } else if(g.notes.some(n=>n.midi===m)) ok=true;
-        else { ok=false; g.wrong++; if(song.hidden && g.wrong>=2) g.reveal=true; }
+        else { ok=false; g.wrong++; if((song.hidden||song.view==='staff') && g.wrong>=2) g.reveal=true; }
       } else ok=false;
     }
   } else if(playing && mode==='play'){
@@ -701,6 +702,22 @@ function genPop(v,m,style){
   return drillItem({src, bpm:m==='play'?(st==='broken'?72:84):70, mode:m, together:true, metro:true, split:50, skills,
     tip:`${[...new Set(P.ch)].join(' – ')} · ${S.label} · heard in ${P.songs} and many more`}, 'Pop chords · '+P.label.split(' · ').pop(), ()=>genPop(v,m));
 }
+
+/* Read the note: notes on a staff, no hints on the keys (they light up after two wrong tries) */
+const READ={
+  c:      {label:'Treble clef · C position', notes:'C4 D4 E4 F4 G4', split:0, need:'b2'},
+  treble: {label:'Treble clef · white keys', notes:'C4 D4 E4 F4 G4 A4 B4 C5 D5 E5 F5 G5 A5', split:0, need:'b10'},
+  bass5:  {label:'Bass clef · C position', notes:'C3 D3 E3 F3 G3', split:128, need:'b4'},
+  bass:   {label:'Bass clef · white keys', notes:'E2 F2 G2 A2 B2 C3 D3 E3 F3 G3 A3 B3 C4', split:128, need:'b9'},
+  both:   {label:'Both clefs', notes:'F2 G2 A2 B2 C3 D3 E3 F3 G3 A3 B3 C4 D4 E4 F4 G4 A4 B4 C5 D5 E5 F5 G5', split:60, need:'b9'},
+  acc:    {label:'Sharps and flats', notes:'C4 C#4 Db4 D4 D#4 Eb4 E4 F4 F#4 Gb4 G4 G#4 Ab4 A4 A#4 Bb4 B4 C5', split:0, need:'b5'},
+};
+function genRead(v){
+  const P=READ[v], pool=P.notes.split(' '), seq=[];
+  while(seq.length<12){ const n=rnd(pool); if(n!==seq[seq.length-1]) seq.push(n); }
+  return drillItem({src:seq.join(' '), bpm:60, mode:'wait', split:P.split, view:'staff', skills:['read'],
+    tip:'Read each note from the staff and play it. A wrong key shows as a red note; after two tries the key lights up.'}, 'Read the note · '+P.label, ()=>genRead(v));
+}
 const DRILLS=[
   {id:'notes', icon:'🎯', title:'Note finder', desc:'Random notes in one hand position. Builds a feel for where every key is.', modeable:true, variants:POS, make:v=>genNotes(v)},
   {id:'chords', icon:'🎹', title:'Chord changes', desc:'Random chord progressions. Press each chord with all its keys together.', modeable:true, variants:CSETS, make:v=>genChords(v)},
@@ -708,6 +725,7 @@ const DRILLS=[
   {id:'scales', icon:'📈', title:'Scale run', desc:'Scales twice through, in tempo with the metronome.', variants:Object.fromEntries(Object.entries(SCALES).map(([k,s])=>[k,{label:s.label,need:s.l}])), make:v=>genScale(v)},
   {id:'hands', icon:'🙌', title:'Hand coordination', desc:'Random two-hand patterns: turns, parallel, mirror, melody + bass.', modeable:true, variants:HANDS, make:v=>genHands(v)},
   {id:'pop', icon:'🎤', title:'Pop chords', desc:'The chord progressions behind countless hits: chords in the right hand, the bass note in the left. A new accompaniment style each time.', modeable:true, variants:POP, make:v=>genPop(v)},
+  {id:'read', icon:'🎼', title:'Read the note', desc:'Notes on a real staff, scrolling past the line. Find each one on the piano without hints on the keys.', variants:READ, make:v=>genRead(v)},
   {id:'ear', icon:'👂', title:'Play by ear', desc:'Hear a short melody, then find it. The notes stay hidden.', variants:EARS, make:v=>genEar(v)},
 ];
 
@@ -721,6 +739,7 @@ function drillPool(fsk){
   for(const [k,s] of Object.entries(SCALES)) if(ok(s.l)) add(LESSON[s.l].skills,()=>genScale(k));
   for(const [k,h] of Object.entries(HANDS)) if(ok(h.need)) add(['hands'],()=>genHands(k));
   for(const [k,p] of Object.entries(POP)) if(ok(p.need)) add(['chords','hands'],()=>genPop(k));
+  for(const [k,r] of Object.entries(READ)) if(ok(r.need)) add(['read'],()=>genRead(k));
   if(passed('b2')) add(['ear'],()=>genEar(3));
   if(passed('b8')) add(['ear'],()=>genEar(5));
   if(passed('b7')) add(['ear'],()=>genEar('wide'));
@@ -742,6 +761,7 @@ const FOCUS={
   scales:{label:'📈 Scales', skills:['scales']},
   hands: {label:'🙌 Two hands', skills:['hands']},
   ear:   {label:'👂 Ear', skills:['ear']},
+  read:  {label:'🎼 Reading', skills:['read']},
   songs: {label:'🎵 Songs', skills:['songs']},
 };
 function estimate(d){ const end=d.notes.reduce((m,n)=>Math.max(m,n.start+n.dur),0), dur=(end+LEAD)/Math.max(0.25,speed); return dur*(d.mode==='wait'?2.2:1.15)*(d.preview?1.8:1)+12; }
@@ -871,6 +891,10 @@ function rline(x,y,w,h,r,col,lw){   // rounded outline, drawn just inside the sh
 }
 function draw(){
   cx.fillStyle=C.bg; cx.fillRect(0,0,W,H);
+  if(song && song.view==='staff') drawStaff(); else drawFalling();
+  drawKeys();
+}
+function drawFalling(){   // notes falling towards the keyboard
   for(let m=lo;m<=hi;m++){
     const r=keyRect(m); if(!r) continue;
     if(r.black){ cx.fillStyle='rgba(0,0,0,0.22)'; cx.fillRect(r.x,0,r.w,kbTop); }
@@ -921,8 +945,12 @@ function draw(){
   cx.globalAlpha=1; cx.restore();
   cx.fillStyle = waiting ? C.accent : 'rgba(255,255,255,0.25)'; cx.fillRect(0,kbTop-2,W,2);
 
+}
+function drawKeys(){   // the keyboard: what's held, what the app plays, and (unless you're reading) which key comes next
+  if(kbH<=0) return;
+  const hidden=song&&song.hidden, reading=song&&song.view==='staff';
   const target=new Map(), sounding=new Map(), g=groups[gi];
-  if(mode==='wait' && g && g.start-t<=EARLY && (!hidden || g.reveal)) g.notes.forEach(n=>{ if(n.req && !n.hit) target.set(n.midi,n); });
+  if(mode==='wait' && g && g.start-t<=EARLY && (!(hidden||reading) || g.reveal)) g.notes.forEach(n=>{ if(n.req && !n.hit) target.set(n.midi,n); });
   if(playing && !(hidden && mode==='listen')) for(let i=Math.max(0,si-64);i<si;i++){ const n=notes[i]; if(!n.req && n.start<=t && n.start+n.dur>t) sounding.set(n.midi,n); }
   const pulse = 0.55+0.45*Math.sin(performance.now()/180);
   const handCol=n=>n.hand==='L'?C.left:C.accent;
@@ -951,6 +979,76 @@ function draw(){
 
 }
 
+
+/* =====================================================================
+   Sheet music: a grand staff that scrolls past a playhead.
+   Clefs and accidentals use Bravura (a SMuFL music font, SIL Open Font License, see fonts/).
+   ===================================================================== */
+const SMUFL={gClef:'', fClef:'', sharp:'', flat:''};
+let musicFont=null, musicFontReady=false;
+function ensureMusicFont(){
+  if(!musicFont) musicFont=new FontFace('Bravura','url(fonts/bravura.woff2)').load().then(f=>{ document.fonts.add(f); musicFontReady=true; }).catch(()=>{});
+  return musicFont;
+}
+const LETTERS='CDEFGAB';
+function spell(n){   // staff step (C0 = 0, D0 = 1, …) and accidental, from the written name when there is one
+  const m=n.name && /^([A-G])(#|b)?(-?\d)$/.exec(n.name);
+  if(m) return {d:(+m[3])*7+LETTERS.indexOf(m[1]), acc:m[2]==='#'?1:m[2]==='b'?-1:0};
+  const pc=n.midi%12, o=Math.floor(n.midi/12)-1, [st,a]=[[0,0],[0,1],[1,0],[1,1],[2,0],[3,0],[3,1],[4,0],[4,1],[5,0],[5,1],[6,0]][pc];
+  return {d:o*7+st, acc:a};
+}
+function staffGeom(){
+  const hud=72;                                      // room for the score and tip at the top
+  const sp=Math.max(6, Math.min(15, (kbTop-hud)/20)); // the space between two staff lines
+  const gap=6*sp, total=8*sp+gap;                   // two staves of four spaces, and room between them for middle C
+  const top=hud+2.5*sp+Math.max(0,(kbTop-hud-20*sp)/2), trebleBot=top+4*sp, bassBot=trebleBot+gap+4*sp;
+  const left=sp*1.2, clefW=sp*4.2;
+  return {sp, top, trebleBot, bassBot, left, clefW, playX:left+clefW+sp*2.5};
+}
+// The bottom line of the treble staff is E4 (step 30), of the bass staff G2 (step 18)
+const staffBase=bass=>bass?18:30;
+const staffY=(G,d,bass)=>(bass?G.bassBot:G.trebleBot)-(d-staffBase(bass))*G.sp/2;
+function drawStaff(){
+  ensureMusicFont();
+  const G=staffGeom(), sp=G.sp, g=groups[gi];
+  cx.strokeStyle='rgba(232,234,246,.55)'; cx.lineWidth=1;
+  for(const bot of [G.trebleBot,G.bassBot]) for(let i=0;i<5;i++){ const y=Math.round(bot-i*sp)+.5; cx.beginPath(); cx.moveTo(G.left,y); cx.lineTo(W,y); cx.stroke(); }
+  cx.beginPath(); cx.moveTo(G.left+.5,G.top); cx.lineTo(G.left+.5,G.bassBot); cx.stroke();   // the line joining the two staves
+  if(musicFontReady){
+    cx.fillStyle=C.text; cx.font=`${4*sp}px Bravura`; cx.textAlign='left'; cx.textBaseline='alphabetic';
+    cx.fillText(SMUFL.gClef, G.left+sp*.5, G.trebleBot-sp);   // the treble (G) clef curls around the G line
+    cx.fillText(SMUFL.fClef, G.left+sp*.5, G.bassBot-3*sp);   // the bass (F) clef's dots sit either side of the F line
+  }
+  const pulse=0.55+0.45*Math.sin(performance.now()/180);   // the playhead pulses while the music waits for you
+  cx.globalAlpha=waiting?pulse:1; cx.fillStyle=waiting?C.accent:'rgba(124,140,255,.5)';
+  cx.fillRect(G.playX-1, G.top-2.5*sp, 2, G.bassBot-G.top+5*sp); cx.globalAlpha=1;
+  const pps=5*sp/Math.max(0.2,songBeat);   // one beat = five staff spaces
+  cx.save(); cx.beginPath(); cx.rect(G.left+G.clefW,0,W,kbTop); cx.clip();
+  for(const n of notes){
+    const x=G.playX+(n.start-t)*pps; if(x>W+3*sp) break; if(x<G.left) continue;
+    const other=mode!=='listen'&&!n.req, now=g&&n.g===g;
+    const col = other ? 'rgba(232,234,246,.35)' : n.hit ? C.good : n.missed ? C.bad : now ? C.accent : C.text;
+    drawStaffNote(G, x, spell(n), n.hand==='L', col, n.dur/Math.max(0.05,songBeat), (n.hit&&!other) || (now&&g.reveal) ? noteLabel(n) : '');
+  }
+  for(const [m,ok] of held) if(ok===false){   // a wrong key: a red ghost note shows where you are
+    cx.globalAlpha=0.65; drawStaffNote(G, G.playX, spell({midi:m}), m<60, C.bad, 1, ''); cx.globalAlpha=1;
+  }
+  cx.restore();
+}
+const noteLabel=n=>{ const m=n.name&&/^([A-G])(#|b)?/.exec(n.name); return m ? m[1]+(m[2]==='#'?'♯':m[2]==='b'?'♭':'') : NAMES[n.midi%12].replace('#','♯'); };
+function drawStaffNote(G,x,{d,acc},bass,col,beats,label){
+  const sp=G.sp, y=staffY(G,d,bass), rel=d-staffBase(bass);
+  cx.strokeStyle=col; cx.fillStyle=col; cx.lineWidth=Math.max(1,sp*.12);
+  for(let k=-2;k>=rel;k-=2){ const ly=staffY(G,staffBase(bass)+k,bass); cx.beginPath(); cx.moveTo(x-sp*1.15,ly); cx.lineTo(x+sp*1.15,ly); cx.stroke(); }   // ledger lines below
+  for(let k=10;k<=rel;k+=2){ const ly=staffY(G,staffBase(bass)+k,bass); cx.beginPath(); cx.moveTo(x-sp*1.15,ly); cx.lineTo(x+sp*1.15,ly); cx.stroke(); }   // and above
+  const open=beats>=1.7, stem=beats<3.4;   // half notes are hollow, whole notes have no stem
+  cx.save(); cx.translate(x,y); cx.rotate(-0.35); cx.beginPath(); cx.ellipse(0,0,sp*.66,sp*.45,0,0,Math.PI*2); cx.restore();
+  if(open){ cx.lineWidth=Math.max(1.2,sp*.16); cx.stroke(); } else cx.fill();
+  if(stem){ cx.lineWidth=Math.max(1,sp*.12); const up=rel<4; cx.beginPath(); cx.moveTo(x+(up?sp*.6:-sp*.6), y); cx.lineTo(x+(up?sp*.6:-sp*.6), y+(up?-3.5:3.5)*sp); cx.stroke(); }
+  if(acc && musicFontReady){ cx.font=`${4*sp}px Bravura`; cx.textAlign='center'; cx.textBaseline='alphabetic'; cx.fillText(acc>0?SMUFL.sharp:SMUFL.flat, x-sp*1.9, y); }
+  if(label){ cx.font=`700 ${Math.round(sp*1.3*Math.max(1,labelScale))}px system-ui,sans-serif`; cx.textAlign='left'; cx.textBaseline='middle'; cx.fillText(label, x+sp*1.1, y+(rel<4?sp*1.1:-sp*1.1)); }
+}
+
 /* =====================================================================
    HUD & play controls
    ===================================================================== */
@@ -973,6 +1071,8 @@ function updateUI(){
   $('#tReplay').hidden=!rp; if(rp) $('#tReplay').innerHTML=`<span>🎙 Replay ✕</span>`;
   $('#recBtn').hidden=!!rp; updateRecBtn();
   $('#lessonBtn').hidden=!(cur && cur.lesson) || !!rp;
+  const kt=$('#kbToggle'); kt.hidden=!(song && song.view==='staff'); kt.classList.toggle('on', prog.settings.staffKeys!==false);
+  kt.title = prog.settings.staffKeys===false ? 'Show the keyboard' : 'Hide the keyboard (read from the staff only)';
   const lb=$('#tLoop'); lb.hidden=!loop; if(loop) lb.innerHTML=`${ICON.loop}<span>${esc(loop.label)} ✕</span>`;
   $('#msg').textContent = rp ? (rp.playing ? '' : 'Paused') : !notes.length ? (rec ? 'Recording… play freely, then press stop' : 'Play freely, or pick something from 🎵 Songs') : !playing && !finished && t<=-LEAD ? 'Press Start (or Space) when you\'re ready' : (!playing && !finished ? 'Paused' : '');
   updateHud();
@@ -1012,11 +1112,14 @@ const ICON={
   edit:  svg('<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/>'),
   del:   svg('<path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/>'),
   book:  svg('<path d="M2 4.5h6a4 4 0 0 1 4 4V21a3 3 0 0 0-3-3H2z"/><path d="M22 4.5h-6a4 4 0 0 0-4 4V21a3 3 0 0 1 3-3h7z"/>'),
+  keys:  svg('<rect x="2" y="5" width="20" height="14" rx="2"/><path d="M7 5v8M12 5v8M17 5v8M5.5 13h3M10.5 13h3M15.5 13h3"/>'),
   rec:   svg('<circle cx="12" cy="12" r="6.5" fill="currentColor" stroke="none"/>'),
   stop:  svg('<rect x="6.5" y="6.5" width="11" height="11" rx="2" fill="currentColor" stroke="none"/>'),
   download: svg('<path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/>'),
   loop:  svg('<path d="m17 2 4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="m7 22-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/>'),
 };
+$('#kbToggle').innerHTML=ICON.keys;
+$('#kbToggle').onclick=()=>{ prog.settings.staffKeys = prog.settings.staffKeys===false; saveProg(); layout(); updateUI(); };
 $('#lessonBtn').innerHTML=ICON.book; $('#lessonBtn').onclick=()=>{ if(cur&&cur.lesson) showIntro(cur.lesson,cur,true); };
 $('#tStart').innerHTML=ICON.start; $('#tBack').innerHTML=ICON.back5; $('#tFwd').innerHTML=ICON.fwd5; $('#tMark').innerHTML=ICON.markAdd; $('#marksBtn').innerHTML=ICON.mark;
 const pos=()=>rp ? rp.w : scrub ? scrub.target : t;   // where the timeline is (the replay has its own clock)
@@ -1888,7 +1991,7 @@ function switchProfile(id){
   if(id!==profiles.active){
     flushTime(); saveProg();
     profiles.active=id; saveProfiles(); prog=loadProg();
-    freeKeyboard(); setHands('both'); setSpeed(1); updateWhoBtn(); applyLabels();
+    freeKeyboard(); setHands('both'); setSpeed(1); updateWhoBtn(); applyLabels(); layout();
     toast(`${me().emoji} Hi, ${me().name}!`);
   }
   closeWho();
