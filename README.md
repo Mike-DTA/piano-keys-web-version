@@ -104,6 +104,12 @@ Connect the piano with a USB-OTG cable and allow MIDI access.
   with the same timing and touch: keys light up green/red as you played them, and in a song the notes move just
   as they did (including Wait-for-me pauses), with the playback controls to pause and scrub. Recordings are listed
   under Songs → Your recordings, and can be downloaded as `.mid` files.
+- **🎼 Sheet music view:** a button in the top bar switches any song, lesson or drill between falling notes and
+  a grand staff that scrolls past a playhead (saved per player). Keys works out the notation: key signature (from the
+  written notes, the MIDI file or MusicXML; spelling unspelled MIDI to fit), time signature and bar lines, note values
+  with dots, flags and beams, chords on one stem, accidentals per bar with naturals, and rests. Notes are spaced by
+  time, with more room for fast passages. Letter names follow the Aa setting and finger numbers are shown. The
+  keyboard below can be hidden. Simplifications: one voice per hand, and no ties across bar lines.
 - **Keyboard view:** hands (practise one hand while the app plays the other), speed, 🥁 metronome
   (accent on beat 1, count-in), sound, note names/fingers with adjustable size (Aa off/S/M/L/XL, saved per player), fullscreen.
 - **🎹 Realistic piano:** the button next to 🔊 switches every sound in Keys (your key presses, the song, Listen and
@@ -126,7 +132,8 @@ Add an entry to `SONGS` in `songs.js`:
 ```
 `rh` and `lh` are the two hands in the notation above; `|` marks bar lines (ignored when playing, but handy for checking
 that both hands line up). `bpm` counts the notation's beat unit; for 6/8 or fast pieces write in eighths and set
-`pulse` (units per metronome click), e.g. `bpm:180, meter:2, pulse:3`. `level` is 1–3; `cat` is a key of `SONG_CATS`.
+`pulse` (units per metronome click), e.g. `bpm:180, meter:2, pulse:3`. The sheet-music view works out the key signature itself;
+set `key` (sharps as +, flats as −, e.g. `key:-2` for B♭ major) when it guesses wrong. `level` is 1–3; `cat` is a key of `SONG_CATS`.
 
 **MIDI files:** put them in a `midi/` folder and add `{id, title, by, cat, level, mid:'midi/name.mid'}`. They are
 fetched only when opened and cached for offline use by the service worker. Hands are split at middle C (set `split` to change), or

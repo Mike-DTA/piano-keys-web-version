@@ -40,8 +40,9 @@ function nameToMidi(s){
 }
 function parseNotation(src,bpm){
   const spb = 60/bpm, out=[]; let beat=0;
+  out.bars=[];   // times of the | bar lines, for sheet music
   for(let tok of src.trim().split(/\s+/)){
-    if(tok==='|') continue;   // bar line
+    if(tok==='|'){ out.bars.push(+(beat*spb).toFixed(4)); continue; }
     let label=null; const lm=/^\[([^\]]+)\]/.exec(tok);
     if(lm){ label=lm[1]; tok=tok.slice(lm[0].length); }
     const ci = tok.lastIndexOf(':');
@@ -58,9 +59,14 @@ function parseNotation(src,bpm){
   }
   return out;
 }
-const voice=(src,bpm,hand)=>src ? parseNotation(src,bpm).map(n=>Object.assign(n,{hand})) : [];
 function prep(d){
-  if(!d.notes) d.notes = d.rh ? [...voice(d.rh,d.bpm,'R'), ...voice(d.lh,d.bpm,'L')] : parseNotation(d.src,d.bpm);
+  if(!d.notes){
+    const main=parseNotation(d.rh||d.src, d.bpm);
+    if(d.rh){ main.forEach(n=>n.hand='R'); d.notes=[...main, ...(d.lh ? parseNotation(d.lh,d.bpm).map(n=>Object.assign(n,{hand:'L'})) : [])]; }
+    else d.notes=main;
+    if(main.bars.length) d.bars=main.bars;
+  }
+  if(d.bpm && !d.q) d.q=60/d.bpm*(d.pulse===3?2:(d.pulse||1));   // seconds per quarter note (6/8 is written in eighths, fast pieces in eighths or sixteenths)
   d.mode=d.mode||'wait'; d.skills=d.skills||[];
   const sp=d.split||60, hd=n=>n.hand||(n.midi<sp?'L':'R');
   d.both = d.notes.some(n=>hd(n)==='L') && d.notes.some(n=>hd(n)==='R');
@@ -76,7 +82,7 @@ function parseMidiFile(buf){
   if(str(4)!=='MThd') throw new Error('Not a MIDI file');
   const hlen=u32(); u16(); const ntr=u16(), div=u16(); p = 8+hlen;
   if(div & 0x8000) throw new Error('SMPTE-timed MIDI files are not supported');
-  const tempos=[{tick:0,usq:500000}], raw=[], tracks=[], marks=[]; let ts=null;
+  const tempos=[{tick:0,usq:500000}], raw=[], tracks=[], marks=[]; let ts=null, keySig=null;
   for(let ti=0; p+8<=v.byteLength && tracks.length<ntr; ti++){
     const id=str(4), len=u32(), end=Math.min(p+len, v.byteLength);
     if(id!=='MTrk'){ p=end; continue; }
@@ -89,6 +95,7 @@ function parseMidiFile(buf){
         const type=u8(), l=vlq();
         if(type===0x03 && !name){ name=str(l).replace(/[^\x20-\x7e]/g,'').trim(); continue; }
         if(type===0x58 && !ts) ts={n:v.getUint8(p), d:2**v.getUint8(p+1)};
+        if(type===0x59 && keySig==null) keySig=v.getInt8(p);   // key signature: sharps (+) or flats (−)
         if(type===0x51) tempos.push({tick, usq:(v.getUint8(p)<<16)|(v.getUint8(p+1)<<8)|v.getUint8(p+2)});
         if(type===0x06) marks.push({tick, label:new TextDecoder().decode(new Uint8Array(buf,p,Math.min(l,end-p))).replace(/\0/g,'').trim().slice(0,40)||'Marker'});   // marker: becomes a saved part
         if(type===0x7f && l===8 && String.fromCharCode(...new Uint8Array(buf,p,5))==='\x7dMCBM'){   // MIDI-Creator bookmark color for the marker just before it
@@ -114,7 +121,9 @@ function parseMidiFile(buf){
   const first = notes.length ? Math.min(...notes.map(n=>n.start)) : 0;
   notes.forEach(n=>n.start-=first);
   const t0 = tempos.filter(t=>t.tick===0).pop();
-  return {tracks:tracks.filter(t=>t.count>0), notes, beat:t0.usq/1e6, ts, lead:first,
+  const barTicks=div*4*(ts?ts.n/ts.d:1), lastTick=raw.reduce((m,n)=>Math.max(m,n.e),0), bars=[];
+  for(let tk=0; tk<=lastTick+barTicks && bars.length<5000; tk+=barTicks){ const b=toSec(tk)-first; if(b>0.01) bars.push(+b.toFixed(4)); }
+  return {tracks:tracks.filter(t=>t.count>0), notes, beat:t0.usq/1e6, ts, keySig, bars, lead:first,
           marks:cleanMarks(marks.map(m=>({t:toSec(m.tick), label:m.label, c:m.c})), first)};
 }
 /* Bookmarks from MIDI-Creator (markers in the file, or &bm= in the link) are in seconds from the start of the file;
@@ -348,7 +357,7 @@ function layout(){
   const dpr=window.devicePixelRatio||1;
   W=cv.clientWidth; H=cv.clientHeight;
   cv.width=Math.round(W*dpr); cv.height=Math.round(H*dpr); cx.setTransform(dpr,0,0,dpr,0,0);
-  kbH = song && song.view==='staff' && prog.settings.staffKeys===false ? 0 : Math.max(70,Math.min(H*0.3,180));
+  kbH = staffView() && prog.settings.staffKeys===false ? 0 : Math.max(70,Math.min(H*0.3,180));
   kbTop=H-kbH; ww=W/Math.max(1,whites.length);
 }
 function keyRect(m){
@@ -419,7 +428,7 @@ function noteOn(m, src, vel=90){
           else scoreKey(n, [...g.notes, ...chordFollowers()]);
         } else if(g.notes.some(n=>n.midi===m)) ok=true;
         else if((late=chordFollowers().find(x=>x.midi===m))){ ok=true; scoreKey(late, chordFollowers()); }   // part of the chord, just written a hair later
-        else { ok=false; g.wrong++; if((song.hidden||song.view==='staff') && g.wrong>=2) g.reveal=true; }
+        else { ok=false; g.wrong++; if((song.hidden||readingItem()) && g.wrong>=2) g.reveal=true; }
       } else ok=false;
     }
   } else if(playing && mode==='play'){
@@ -977,7 +986,7 @@ function rline(x,y,w,h,r,col,lw){   // rounded outline, drawn just inside the sh
 }
 function draw(){
   cx.fillStyle=C.bg; cx.fillRect(0,0,W,H);
-  if(song && song.view==='staff') drawStaff(); else drawFalling();
+  if(staffView()) drawStaff(); else drawFalling();
   drawKeys();
 }
 function drawFalling(){   // notes falling towards the keyboard
@@ -1034,7 +1043,7 @@ function drawFalling(){   // notes falling towards the keyboard
 }
 function drawKeys(){   // the keyboard: what's held, what the app plays, and (unless you're reading) which key comes next
   if(kbH<=0) return;
-  const hidden=song&&song.hidden, reading=song&&song.view==='staff';
+  const hidden=song&&song.hidden, reading=readingItem();
   const target=new Map(), sounding=new Map(), g=groups[gi];
   if(mode==='wait' && g && g.start-t<=EARLY && (!(hidden||reading) || g.reveal)) [...g.notes, ...(hidden||reading?[]:chordFollowers())].forEach(n=>{ if(n.req && !n.hit && !target.has(n.midi)) target.set(n.midi,n); });
   if(playing && !(hidden && mode==='listen')) for(let i=Math.max(0,si-64);i<si;i++){ const n=notes[i]; if(!n.req && n.start<=t && n.start+n.dur>t) sounding.set(n.midi,n); }
@@ -1068,73 +1077,202 @@ function drawKeys(){   // the keyboard: what's held, what the app plays, and (un
 
 /* =====================================================================
    Sheet music: a grand staff that scrolls past a playhead.
-   Clefs and accidentals use Bravura (a SMuFL music font, SIL Open Font License, see fonts/).
+   Glyphs come from Bravura (a SMuFL music font, SIL Open Font License, see fonts/).
+   Notes are spaced by time (like Simply Piano) rather than engraved like a printed page.
    ===================================================================== */
-const SMUFL={gClef:'', fClef:'', sharp:'', flat:''};
-let musicFont=null, musicFontReady=false;
+const SMUFL={gClef:'', fClef:'', sharp:'', flat:'', natural:'',
+  flag8Up:'', flag8Down:'', flag16Up:'', flag16Down:'',
+  restWhole:'', restHalf:'', restQuarter:'', dot:''};
+const tsDigits=n=>String(n).split('').map(c=>String.fromCharCode(0xE080+(+c))).join('');
+let musicFont=null, musicFontReady=false, sheet=null;
 function ensureMusicFont(){
   if(!musicFont) musicFont=new FontFace('Bravura','url(fonts/bravura.woff2)').load().then(f=>{ document.fonts.add(f); musicFontReady=true; }).catch(()=>{});
   return musicFont;
 }
-const LETTERS='CDEFGAB';
-function spell(n){   // staff step (C0 = 0, D0 = 1, …) and accidental, from the written name when there is one
-  const m=n.name && /^([A-G])(#|b)?(-?\d)$/.exec(n.name);
-  if(m) return {d:(+m[3])*7+LETTERS.indexOf(m[1]), acc:m[2]==='#'?1:m[2]==='b'?-1:0};
-  const pc=n.midi%12, o=Math.floor(n.midi/12)-1, [st,a]=[[0,0],[0,1],[1,0],[1,1],[2,0],[3,0],[3,1],[4,0],[4,1],[5,0],[5,1],[6,0]][pc];
-  return {d:o*7+st, acc:a};
+const staffView=()=>!!song && notes.length>0 && !song.hidden && (song.view==='staff' || prog.settings.view==='staff');
+const readingItem=()=>!!song && song.view==='staff';   // reading practice: no hints on the keys
+
+/* ---------- From notes to notation ---------- */
+const LETTERS='CDEFGAB', STEP_PC=[0,2,4,5,7,9,11], SHARPS='FCGDAEB', FLATS='BEADGCF';
+const sigAcc=(k,L)=> k>0 && SHARPS.indexOf(L)<k ? 1 : k<0 && FLATS.indexOf(L)< -k ? -1 : 0;   // what the key signature does to a letter
+function estimateKey(ns){   // the key signature that fits the notes best, as a major key or its relative minor (whose raised 6th and 7th count half)
+  if(!ns.length) return 0;
+  const named=ns.filter(n=>n.name).length>ns.length/2;
+  const lastT=Math.max(...ns.map(n=>n.start)), endPc=Math.min(...ns.filter(n=>n.start>lastT-0.1).map(n=>n.midi))%12, bonus=0.08*ns.length;   // pieces end on their home note
+  let best=0, bs=-1e9;
+  for(let k=-6;k<=6;k++){
+    const tonicL=((4*k)%7+7)%7, minorL=(tonicL+5)%7;   // letter of the major key's tonic (C, G, D, … / F, B♭, …) and of its relative minor
+    let major=0, minor=0;
+    if(named){
+      for(const n of ns){ const m=n.name&&/^([A-G])(#|b)?/.exec(n.name); if(!m) continue;
+        const L=LETTERS.indexOf(m[1]), a=m[2]==='#'?1:m[2]==='b'?-1:0, fits=a===sigAcc(k,m[1]);
+        if(fits) major++;
+        if(fits) minor++; else if((L===(minorL+6)%7 || L===(minorL+5)%7) && a===sigAcc(k,m[1])+1) minor+=0.5; }
+    } else {
+      const tonic=((7*k)%12+12)%12, scale=STEP_PC.map(x=>(x+tonic)%12), mt=(tonic+9)%12, raised=[(mt+11)%12,(mt+9)%12];
+      for(const n of ns){ const pc=n.midi%12; if(scale.includes(pc)){ major++; minor++; } else if(raised.includes(pc)) minor+=0.5; }
+    }
+    const tonicPc=((7*k)%12+12)%12;
+    if(endPc===tonicPc) major+=bonus; if(endPc===(tonicPc+9)%12) minor+=bonus;
+    const sc=Math.max(major,minor)-0.001*Math.abs(k);
+    if(sc>bs){ bs=sc; best=k; }
+  }
+  return best;
 }
+function spellIn(midi,k){   // spell a key number to suit key signature k
+  const pc=midi%12, o=Math.floor(midi/12)-1; let best=null, bs=-1;
+  for(let li=0;li<7;li++) for(const a of [0,1,-1]){
+    if((STEP_PC[li]+a+12)%12!==pc) continue;
+    const sc=(a===sigAcc(k,LETTERS[li])?4:0)+(a===0?2:0)+((k>=0?a===1:a===-1)?1:0);
+    if(sc>bs){ bs=sc; best={li,a}; }
+  }
+  const oct = best.li===0&&best.a===-1 ? o+1 : best.li===6&&best.a===1 ? o-1 : o;   // C♭ and B♯ belong to the neighbouring octave
+  return {d:oct*7+best.li, acc:best.a};
+}
+function spell(n,k=0){   // staff step (C0 = 0, D0 = 1, …) and accidental, from the written name when there is one
+  const m=n.name && /^([A-G])(#|b)?(-?\d)$/.exec(n.name);
+  return m ? {d:(+m[3])*7+LETTERS.indexOf(m[1]), acc:m[2]==='#'?1:m[2]==='b'?-1:0} : spellIn(n.midi,k);
+}
+const VALUES=[[4,'w',0],[3,'h',1],[2,'h',0],[1.5,'q',1],[1,'q',0],[0.75,'8',1],[0.5,'8',0],[0.375,'16',1],[0.25,'16',0]];
+function noteValue(beats){ if(beats>=5) return [6,'w',1]; let best=VALUES[VALUES.length-1], bd=1e9; for(const v of VALUES){ const d=Math.abs(Math.log(beats/v[0])); if(d<bd){ bd=d; best=v; } } return best; }
+function engrave(){   // worked out once per song: key, bars, chords per hand with values, stems, beams, accidentals and rests
+  const k=song.keySig!=null ? song.keySig : estimateKey(notes);
+  const q=song.q || songBeat;
+  const ts=song.ts || (song.pulse===3 ? {n:meter*3, d:8} : {n:meter, d:4});
+  const barLen=ts.n*q*4/ts.d, written=notes.some(n=>n.name) && !!song.bpm;   // Keys' own notation plays notes 8% short of their value
+  let bars=(song.bars&&song.bars.length ? song.bars : []).filter(b=>b>0.01);
+  if(!bars.length) for(let b=barLen;b<songEnd+barLen;b+=barLen) bars.push(b);
+  const barAt=t=>{ let lo=0, hi=bars.length; while(lo<hi){ const m=(lo+hi)>>1; if(bars[m]<=t+1e-3) lo=m+1; else hi=m; } return lo; };   // bar number
+  const barStart=i=> i===0 ? Math.min(0, (bars[0]||barLen)-barLen) : bars[i-1];
+  const ev=[], rests=[], beams=[];
+  for(const hand of ['R','L']){
+    const es=[]; let g=null;
+    for(const n of notes){ if(n.hand!==hand) continue; if(g && n.start-g.t<0.06){ g.notes.push(n); continue; } g={t:n.start, hand, notes:[n]}; es.push(g); }
+    if(!es.length) continue;
+    const mid=hand==='R'?34:22;   // middle line of the staff: B4 / D3
+    let state=new Map(), stateBar=-1, lastEnd=0;
+    for(const e of es){
+      const beats=Math.max(...e.notes.map(n=>n.dur))*(written?1/0.92:1)/q;
+      e.val=noteValue(beats); e.bar=barAt(e.t);
+      if(e.bar!==stateBar){ state=new Map(); stateBar=e.bar; }
+      e.heads=e.notes.map(n=>{ const sp=spell(n,k), cur=state.has(sp.d)?state.get(sp.d):sigAcc(k,LETTERS[((sp.d%7)+7)%7]);
+        const show = sp.acc!==cur ? sp.acc : null; if(show!==null) state.set(sp.d,sp.acc);
+        return {n, d:sp.d, show}; }).sort((a,b)=>a.d-b.d);
+      e.up=(e.heads.reduce((a,h)=>a+h.d,0)/e.heads.length)<mid;
+      ev.push(e);
+    }
+    // beams: eighths and sixteenths within one beat (a dotted quarter in 6/8) and one bar
+    const grp=ts.d===8&&ts.n%3===0 ? 1.5*q : q; let run=[];
+    const flush=()=>{ if(run.length>1){ const up=run.filter(e=>e.up).length>=run.length/2; run.forEach(e=>{ e.up=up; e.beam=beams.length; }); beams.push(run); } run=[]; };
+    for(const e of es){
+      const short=e.val[1]==='8'||e.val[1]==='16', bs=barStart(e.bar), slot=Math.floor((e.t-bs+1e-3)/grp), p=run[run.length-1];
+      if(!short){ flush(); continue; }
+      if(p && (p.bar!==e.bar || p.slot!==slot || e.t-(p.t+p.val[0]*q)>0.1*q)) flush();
+      e.slot=slot; run.push(e);
+    }
+    flush();
+    // rests where this hand is silent for a beat or more
+    const add=(t,len)=>{ let c=t, left=len; while(left>=0.95*q){ const two=left>=1.95*q; rests.push({t:c, hand, kind:two?'h':'q'}); c+=two?2*q:q; left-=two?2*q:q; } };
+    for(let b=0;b<=bars.length;b++){
+      const b0=barStart(b), b1=b<bars.length?bars[b]:Math.max(b0+barLen,songEnd); if(b0>songEnd) break;
+      const inBar=es.filter(e=>e.bar===b);
+      if(!inBar.length && lastEnd<=b0+0.01){ if(b1-b0>=0.95*q) rests.push({t:b0, t1:b1, hand, kind:'w'}); continue; }
+      let cur=Math.max(b0,lastEnd);
+      for(const e of inBar){ if(e.t-cur>=0.95*q) add(cur,e.t-cur); cur=Math.max(cur,e.t+e.val[0]*q); lastEnd=Math.max(lastEnd,cur); }
+      if(b1-cur>=0.95*q && b1<=songEnd+0.01) add(cur,b1-cur);
+    }
+  }
+  ev.sort((a,b)=>a.t-b.t);
+  const on=[...new Set(ev.map(e=>+e.t.toFixed(3)))].sort((a,b)=>a-b), gaps=on.slice(1).map((t,i)=>t-on[i]).filter(g=>g>0.03).sort((a,b)=>a-b);
+  return {song, k, ts, q, bars, ev, rests, beams, minGap: gaps.length ? gaps[Math.floor(gaps.length*0.1)] : q};
+}
+
+/* ---------- Drawing ---------- */
 function staffGeom(){
   const hud=72;                                      // room for the score and tip at the top
   const sp=Math.max(6, Math.min(15, (kbTop-hud)/20)); // the space between two staff lines
   const gap=6*sp, total=8*sp+gap;                   // two staves of four spaces, and room between them for middle C
   const top=hud+2.5*sp+Math.max(0,(kbTop-hud-20*sp)/2), trebleBot=top+4*sp, bassBot=trebleBot+gap+4*sp;
-  const left=sp*1.2, clefW=sp*4.2;
-  return {sp, top, trebleBot, bassBot, left, clefW, playX:left+clefW+sp*2.5};
+  return {sp, top, trebleBot, bassBot, left:sp*1.2, clefW:sp*4.2};
 }
 // The bottom line of the treble staff is E4 (step 30), of the bass staff G2 (step 18)
 const staffBase=bass=>bass?18:30;
 const staffY=(G,d,bass)=>(bass?G.bassBot:G.trebleBot)-(d-staffBase(bass))*G.sp/2;
+const noteLabel=n=>{ const m=n.name&&/^([A-G])(#|b)?/.exec(n.name); return m ? m[1]+(m[2]==='#'?'♯':m[2]==='b'?'♭':'') : NAMES[n.midi%12].replace('#','♯'); };
 function drawStaff(){
   ensureMusicFont();
-  const G=staffGeom(), sp=G.sp, g=groups[gi];
-  cx.strokeStyle='rgba(232,234,246,.55)'; cx.lineWidth=1;
+  if(!sheet || sheet.song!==song) sheet=engrave();
+  const S=sheet, G=staffGeom(), sp=G.sp, g=groups[gi], reading=readingItem(), font=`${4*sp}px Bravura`;
+  const ksW=Math.abs(S.k)*sp*1.05, tsW=sp*2.6, headW=G.clefW+ksW+tsW, playX=G.left+headW+sp*2.5;
+  const lineCol='rgba(232,234,246,.55)';
+  cx.strokeStyle=lineCol; cx.lineWidth=1;
   for(const bot of [G.trebleBot,G.bassBot]) for(let i=0;i<5;i++){ const y=Math.round(bot-i*sp)+.5; cx.beginPath(); cx.moveTo(G.left,y); cx.lineTo(W,y); cx.stroke(); }
   cx.beginPath(); cx.moveTo(G.left+.5,G.top); cx.lineTo(G.left+.5,G.bassBot); cx.stroke();   // the line joining the two staves
-  if(musicFontReady){
-    cx.fillStyle=C.text; cx.font=`${4*sp}px Bravura`; cx.textAlign='left'; cx.textBaseline='alphabetic';
+  if(musicFontReady){   // clefs, key signature and time signature stay at the left
+    cx.fillStyle=C.text; cx.font=font; cx.textAlign='left'; cx.textBaseline='alphabetic';
     cx.fillText(SMUFL.gClef, G.left+sp*.5, G.trebleBot-sp);   // the treble (G) clef curls around the G line
     cx.fillText(SMUFL.fClef, G.left+sp*.5, G.bassBot-3*sp);   // the bass (F) clef's dots sit either side of the F line
+    const order=S.k>0?[38,35,39,36,33,37,34]:[34,37,33,36,32,35,31];   // treble steps of F♯ C♯ G♯ … / B♭ E♭ A♭ …
+    for(let i=0;i<Math.abs(S.k);i++) for(const bass of [false,true]) cx.fillText(S.k>0?SMUFL.sharp:SMUFL.flat, G.left+G.clefW+i*sp*1.05, staffY(G, order[i]-(bass?14:0), bass));
+    const tx=G.left+G.clefW+ksW+sp*.2;
+    for(const bot of [G.trebleBot,G.bassBot]){ cx.fillText(tsDigits(S.ts.n), tx, bot-3*sp); cx.fillText(tsDigits(S.ts.d), tx, bot-sp); }
   }
   const pulse=0.55+0.45*Math.sin(performance.now()/180);   // the playhead pulses while the music waits for you
   cx.globalAlpha=waiting?pulse:1; cx.fillStyle=waiting?C.accent:'rgba(124,140,255,.5)';
-  cx.fillRect(G.playX-1, G.top-2.5*sp, 2, G.bassBot-G.top+5*sp); cx.globalAlpha=1;
-  const pps=5*sp/Math.max(0.2,songBeat);   // one beat = five staff spaces
-  cx.save(); cx.beginPath(); cx.rect(G.left+G.clefW,0,W,kbTop); cx.clip();
-  for(const n of notes){
-    const x=G.playX+(n.start-t)*pps; if(x>W+3*sp) break; if(x<G.left) continue;
-    const other=mode!=='listen'&&!n.req, now=g&&n.g===g;
-    const col = other ? 'rgba(232,234,246,.35)' : n.hit ? C.good : n.missed ? C.bad : now ? C.accent : C.text;
-    drawStaffNote(G, x, spell(n), n.hand==='L', col, n.dur/Math.max(0.05,songBeat), (n.hit&&!other) || (now&&g.reveal) ? noteLabel(n) : '');
+  cx.fillRect(playX-1, G.top-2.5*sp, 2, G.bassBot-G.top+5*sp); cx.globalAlpha=1;
+  const pps=Math.max(5*sp/S.q, 2.8*sp/Math.max(0.05,S.minGap));   // a quarter note is at least 5 spaces, and close notes never overlap
+  const X=tt=>playX+(tt-t)*pps, tMin=t-(playX-G.left)/pps-1, tMax=t+(W-playX)/pps+1;
+  cx.save(); cx.beginPath(); cx.rect(G.left+headW,0,W,kbTop); cx.clip();
+  cx.strokeStyle=lineCol; cx.lineWidth=1;   // bar lines
+  for(const b of S.bars){ if(b<tMin) continue; if(b>tMax) break; const x=Math.round(X(b)-sp*.9)+.5; cx.beginPath(); cx.moveTo(x,G.trebleBot-4*sp); cx.lineTo(x,G.bassBot); cx.stroke(); }
+  if(musicFontReady){ cx.fillStyle='rgba(232,234,246,.7)'; cx.font=font; cx.textAlign='center'; cx.textBaseline='alphabetic';   // rests
+    for(const r of S.rests){ if(r.t<tMin||r.t>tMax) continue; const bot=r.hand==='L'?G.bassBot:G.trebleBot;
+      if(r.kind==='w') cx.fillText(SMUFL.restWhole, (X(r.t)+X(r.t1))/2-sp*.9, bot-3*sp); else cx.fillText(r.kind==='h'?SMUFL.restHalf:SMUFL.restQuarter, X(r.t), bot-2*sp); } }
+  const colorOf=n=>{ const other=mode!=='listen'&&!n.req; return other ? 'rgba(232,234,246,.35)' : n.hit ? C.good : n.missed ? C.bad : g&&n.g===g ? C.accent : C.text; };
+  const stemEnd=e=>{ const bass=e.hand==='L', ys=e.heads.map(h=>staffY(G,h.d,bass)); return e.up ? Math.min(...ys)-3.5*sp : Math.max(...ys)+3.5*sp; };
+  // beams first, so stems can meet them
+  const beamY=new Map();
+  for(const [i,run] of S.beams.entries()){ if(run[run.length-1].t<tMin || run[0].t>tMax) continue; const up=run[0].up, ends=run.map(stemEnd), y=up?Math.min(...ends):Math.max(...ends); beamY.set(i,y);
+    const x0=X(run[0].t)+(up?sp*.6:-sp*.6), x1=X(run[run.length-1].t)+(up?sp*.6:-sp*.6), th=sp*.5;
+    cx.fillStyle=colorOf(run[0].notes[0]); cx.fillRect(x0-.5, up?y:y-th, x1-x0+1, th);
+    for(let j=0;j<run.length-1;j++) if(run[j].val[1]==='16' && run[j+1].val[1]==='16'){ const a=X(run[j].t)+(up?sp*.6:-sp*.6), b=X(run[j+1].t)+(up?sp*.6:-sp*.6); cx.fillRect(a-.5, up?y+th*1.6:y-th*2.6, b-a+1, th); } }
+  for(const e of S.ev){
+    if(e.t<tMin) continue; if(e.t>tMax) break;
+    const x=X(e.t), bass=e.hand==='L', base=staffBase(bass), col=colorOf(e.notes[0]);
+    cx.lineWidth=Math.max(1,sp*.12);
+    for(const h of e.heads){   // ledger lines
+      const rel=h.d-base; cx.strokeStyle=colorOf(h.n);
+      for(let k2=-2;k2>=rel;k2-=2){ const ly=staffY(G,base+k2,bass); cx.beginPath(); cx.moveTo(x-sp*1.15,ly); cx.lineTo(x+sp*1.15,ly); cx.stroke(); }
+      for(let k2=10;k2<=rel;k2+=2){ const ly=staffY(G,base+k2,bass); cx.beginPath(); cx.moveTo(x-sp*1.15,ly); cx.lineTo(x+sp*1.15,ly); cx.stroke(); }
+    }
+    const open=e.val[1]==='w'||e.val[1]==='h';
+    e.heads.forEach((h,i)=>{   // noteheads; a second (two neighbouring steps) moves to the other side of the stem
+      const y=staffY(G,h.d,bass), shift=i>0 && h.d-e.heads[i-1].d===1 && !e.heads[i-1].shifted ? (h.shifted=true, e.up?sp*1.25:-sp*1.25) : (h.shifted=false, 0), hx=x+shift;
+      cx.strokeStyle=cx.fillStyle=colorOf(h.n);
+      cx.save(); cx.translate(hx,y); cx.rotate(-0.35); cx.beginPath(); cx.ellipse(0,0,sp*.66,sp*.45,0,0,Math.PI*2); cx.restore();
+      if(open){ cx.lineWidth=Math.max(1.2,sp*.16); cx.stroke(); } else cx.fill();
+      if(musicFontReady){ cx.font=font; cx.textAlign='center'; cx.textBaseline='alphabetic';
+        if(h.show!==null) cx.fillText(h.show>0?SMUFL.sharp:h.show<0?SMUFL.flat:SMUFL.natural, x-sp*1.9, y);
+        if(e.val[2]) cx.fillText(SMUFL.dot, hx+sp*1.25, (h.d-base)%2===0 ? y-sp/2 : y); }   // a dot sits in a space
+      const label = reading ? ((h.n.hit && h.n.req) || (e.notes.includes(h.n) && g && h.n.g===g && g.reveal) ? noteLabel(h.n) : '') : (labelScale ? noteLabel(h.n) : '');
+      if(label){ cx.font=`700 ${Math.round(sp*1.15*Math.max(1,labelScale))}px system-ui,sans-serif`; cx.textAlign='left'; cx.textBaseline='middle'; cx.fillText(label, hx+sp*(e.val[2]?1.9:1.05), y+(e.up?sp*.9:-sp*.9)); }
+    });
+    if(e.val[1]!=='w'){   // stem, and a flag unless it's beamed
+      const sx=x+(e.up?sp*.6:-sp*.6), ys=e.heads.map(h=>staffY(G,h.d,bass)), from=e.up?Math.max(...ys):Math.min(...ys), to=e.beam!=null&&beamY.has(e.beam)?beamY.get(e.beam):stemEnd(e);
+      cx.strokeStyle=col; cx.lineWidth=Math.max(1,sp*.12); cx.beginPath(); cx.moveTo(sx,from); cx.lineTo(sx,to); cx.stroke();
+      if(e.beam==null && (e.val[1]==='8'||e.val[1]==='16') && musicFontReady){ cx.fillStyle=col; cx.font=font; cx.textAlign='left'; cx.textBaseline='alphabetic';
+        cx.fillText(e.val[1]==='8'?(e.up?SMUFL.flag8Up:SMUFL.flag8Down):(e.up?SMUFL.flag16Up:SMUFL.flag16Down), sx-sp*.06, to); }
+    }
+    const fing=e.notes.find(n=>n.finger);   // finger numbers above the right hand, below the left
+    if(fing && labelScale && !reading){ const ys=e.heads.map(h=>staffY(G,h.d,bass)), fy=bass ? Math.max(...ys, e.up?-1e9:stemEnd(e), G.bassBot)+sp*1.6 : Math.min(...ys, e.up?stemEnd(e):1e9, G.trebleBot-4*sp)-sp*1.4;
+      cx.fillStyle=col; cx.font=`800 ${Math.round(sp*1.2*Math.max(1,labelScale))}px system-ui,sans-serif`; cx.textAlign='center'; cx.textBaseline='middle'; cx.fillText(e.notes.filter(n=>n.finger).map(n=>n.finger).join(''), x, fy); }
   }
   for(const [m,ok] of held) if(ok===false){   // a wrong key: a red ghost note shows where you are
-    cx.globalAlpha=0.65; drawStaffNote(G, G.playX, spell({midi:m}), m<60, C.bad, 1, ''); cx.globalAlpha=1;
+    const gh=spellIn(m,S.k), bass=m<60, y=staffY(G,gh.d,bass);
+    cx.globalAlpha=0.65; cx.fillStyle=C.bad; cx.save(); cx.translate(playX,y); cx.rotate(-0.35); cx.beginPath(); cx.ellipse(0,0,sp*.66,sp*.45,0,0,Math.PI*2); cx.restore(); cx.fill(); cx.globalAlpha=1;
   }
   cx.restore();
 }
-const noteLabel=n=>{ const m=n.name&&/^([A-G])(#|b)?/.exec(n.name); return m ? m[1]+(m[2]==='#'?'♯':m[2]==='b'?'♭':'') : NAMES[n.midi%12].replace('#','♯'); };
-function drawStaffNote(G,x,{d,acc},bass,col,beats,label){
-  const sp=G.sp, y=staffY(G,d,bass), rel=d-staffBase(bass);
-  cx.strokeStyle=col; cx.fillStyle=col; cx.lineWidth=Math.max(1,sp*.12);
-  for(let k=-2;k>=rel;k-=2){ const ly=staffY(G,staffBase(bass)+k,bass); cx.beginPath(); cx.moveTo(x-sp*1.15,ly); cx.lineTo(x+sp*1.15,ly); cx.stroke(); }   // ledger lines below
-  for(let k=10;k<=rel;k+=2){ const ly=staffY(G,staffBase(bass)+k,bass); cx.beginPath(); cx.moveTo(x-sp*1.15,ly); cx.lineTo(x+sp*1.15,ly); cx.stroke(); }   // and above
-  const open=beats>=1.7, stem=beats<3.4;   // half notes are hollow, whole notes have no stem
-  cx.save(); cx.translate(x,y); cx.rotate(-0.35); cx.beginPath(); cx.ellipse(0,0,sp*.66,sp*.45,0,0,Math.PI*2); cx.restore();
-  if(open){ cx.lineWidth=Math.max(1.2,sp*.16); cx.stroke(); } else cx.fill();
-  if(stem){ cx.lineWidth=Math.max(1,sp*.12); const up=rel<4; cx.beginPath(); cx.moveTo(x+(up?sp*.6:-sp*.6), y); cx.lineTo(x+(up?sp*.6:-sp*.6), y+(up?-3.5:3.5)*sp); cx.stroke(); }
-  if(acc && musicFontReady){ cx.font=`${4*sp}px Bravura`; cx.textAlign='center'; cx.textBaseline='alphabetic'; cx.fillText(acc>0?SMUFL.sharp:SMUFL.flat, x-sp*1.9, y); }
-  if(label){ cx.font=`700 ${Math.round(sp*1.3*Math.max(1,labelScale))}px system-ui,sans-serif`; cx.textAlign='left'; cx.textBaseline='middle'; cx.fillText(label, x+sp*1.1, y+(rel<4?sp*1.1:-sp*1.1)); }
-}
-
 /* =====================================================================
    HUD & play controls
    ===================================================================== */
@@ -1157,7 +1295,9 @@ function updateUI(){
   $('#tReplay').hidden=!rp; if(rp) $('#tReplay').innerHTML=`<span>🎙 Replay ✕</span>`;
   $('#recBtn').hidden=!!rp; updateRecBtn();
   $('#lessonBtn').hidden=!(cur && cur.lesson) || !!rp;
-  const kt=$('#kbToggle'); kt.hidden=!(song && song.view==='staff'); kt.classList.toggle('on', prog.settings.staffKeys!==false);
+  const kt=$('#kbToggle'); kt.hidden=!staffView();
+  const vb=$('#viewBtn'), canSwitch=!!song && notes.length>0 && !song.hidden && song.view!=='staff';
+  vb.hidden=!canSwitch; if(canSwitch){ const sv=staffView(); vb.innerHTML=sv?ICON.falling:ICON.sheet; vb.title=sv?'Show falling notes':'Show sheet music'; vb.setAttribute('aria-label',vb.title); } kt.classList.toggle('on', prog.settings.staffKeys!==false);
   kt.title = prog.settings.staffKeys===false ? 'Show the keyboard' : 'Hide the keyboard (read from the staff only)';
   const lb=$('#tLoop'); lb.hidden=!loop; if(loop) lb.innerHTML=`${ICON.loop}<span>${esc(loop.label)} ✕</span>`;
   $('#msg').textContent = rp ? (rp.playing ? '' : 'Paused') : !notes.length ? (rec ? 'Recording… play freely, then press stop' : 'Play freely, or pick something from 🎵 Songs') : !playing && !finished && t<=-LEAD ? 'Press Start (or Space) when you\'re ready' : (!playing && !finished ? 'Paused' : '');
@@ -1198,6 +1338,8 @@ const ICON={
   edit:  svg('<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/>'),
   del:   svg('<path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/>'),
   book:  svg('<path d="M2 4.5h6a4 4 0 0 1 4 4V21a3 3 0 0 0-3-3H2z"/><path d="M22 4.5h-6a4 4 0 0 0-4 4V21a3 3 0 0 1 3-3h7z"/>'),
+  sheet: svg('<path d="M2 7h20M2 11h20M2 15h20"/><ellipse cx="9" cy="17" rx="2.6" ry="2" fill="currentColor" stroke="none"/><path d="M11.4 17V4"/>'),
+  falling: svg('<rect x="4" y="2" width="4" height="9" rx="1.5" fill="currentColor" stroke="none"/><rect x="14" y="6" width="4" height="7" rx="1.5" fill="currentColor" stroke="none"/><path d="M2 21h20M2 16.5h20"/>'),
   keys:  svg('<rect x="2" y="5" width="20" height="14" rx="2"/><path d="M7 5v8M12 5v8M17 5v8M5.5 13h3M10.5 13h3M15.5 13h3"/>'),
   rec:   svg('<circle cx="12" cy="12" r="6.5" fill="currentColor" stroke="none"/>'),
   stop:  svg('<rect x="6.5" y="6.5" width="11" height="11" rx="2" fill="currentColor" stroke="none"/>'),
@@ -1205,6 +1347,7 @@ const ICON={
   loop:  svg('<path d="m17 2 4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="m7 22-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/>'),
 };
 $('#kbToggle').innerHTML=ICON.keys;
+$('#viewBtn').onclick=()=>{ prog.settings.view = staffView() ? 'falling' : 'staff'; saveProg(); sheet=null; layout(); updateUI(); };
 $('#kbToggle').onclick=()=>{ prog.settings.staffKeys = prog.settings.staffKeys===false; saveProg(); layout(); updateUI(); };
 $('#lessonBtn').innerHTML=ICON.book; $('#lessonBtn').onclick=()=>{ if(cur&&cur.lesson) showIntro(cur.lesson,cur,true); };
 $('#tStart').innerHTML=ICON.start; $('#tBack').innerHTML=ICON.back5; $('#tFwd').innerHTML=ICON.fwd5; $('#tMark').innerHTML=ICON.markAdd; $('#marksBtn').innerHTML=ICON.mark;
@@ -1383,7 +1526,7 @@ function testEntries(){
 async function songDef(e){   // notes are parsed (or the MIDI file fetched) the first time a song is opened
   if(e.def) return e.def;
   let d;
-  if(e.mine) d={notes:handsFor(e.mine), beat:e.mine.beat, meter:e.mine.meter};
+  if(e.mine){ const M=e.mine; d={notes:handsFor(M), beat:M.beat, meter:M.meter, q:M.q, ts:M.ts, keySig:M.keySig, bars:M.bars}; }
   else if(e.mid){
     const r=await fetch(e.mid); if(!r.ok) throw new Error('Could not load '+e.mid);
     const p=parseMidiFile(await r.arrayBuffer());
@@ -1392,8 +1535,9 @@ async function songDef(e){   // notes are parsed (or the MIDI file fetched) the 
       const rt=p.tracks.reduce((a,b)=>avg(b)>avg(a)?b:a).index;
       p.notes.forEach(n=>n.hand=n.track===rt?'R':'L');
     }
-    d={notes:p.notes, beat:p.beat*(e.pulse||1), split:e.split, meter:e.meter};
+    d={notes:p.notes, beat:p.beat*(e.pulse||1), split:e.split, meter:e.meter, q:p.beat, ts:p.ts, keySig:p.keySig, bars:p.bars};
   } else d={bpm:e.bpm, meter:e.meter, pulse:e.pulse, split:e.split, rh:e.rh, lh:e.lh};
+  if(e.key!=null) d.keySig=e.key;   // a song can state its key signature (sharps +, flats −) when the guess would be wrong
   d.title=e.title;
   return e.def=prep(d);
 }
@@ -1574,7 +1718,8 @@ async function importFiles(files, bm){   // bm: bookmarks sent with a link, used
       const p = p0() || parseMusicXML(sig==='PK\x03\x04' ? await unzipMusicXML(buf) : new TextDecoder().decode(buf));
       if(!p.notes.length) throw new Error('no notes found');
       const r={id:Date.now().toString(36)+Math.random().toString(36).slice(2,6), title:p.title||f.name.replace(/\.[^.]+$/,''), by:p.by||'', file:f.name, added:Date.now(), hash,
-               tracks:p.tracks, on:p.tracks.map(t=>t.index), notes:p.notes, marks:marksOf(p.marks?p:null), ...meterOf(p.ts,p.beat)};
+               tracks:p.tracks, on:p.tracks.map(t=>t.index), notes:p.notes, marks:marksOf(p.marks?p:null), ...meterOf(p.ts,p.beat),
+               q:p.beat, ts:p.ts, keySig:p.keySig, bars:p.bars};
       await dbDo(true,st=>st.put(r)); mySongs.push(r); added.push(r);
     }catch(err){ alert(`Could not add ${f.name}: ${err.message}`); }
   }
@@ -1611,12 +1756,12 @@ function parseMusicXML(text){
   const kid=(el,name)=>[...el.children].find(c=>c.nodeName===name), num=(el,name,d=0)=>{ const c=el&&kid(el,name); return c?+c.textContent:d; };
   const names={}; x.querySelectorAll('part-list score-part').forEach(sp=>{ const n=sp.querySelector('part-name'); names[sp.id]=(n&&n.textContent.trim())||''; });
   const PC={C:0,D:2,E:4,F:5,G:7,A:9,B:11}, UNIT={whole:4,half:2,quarter:1,eighth:.5,'16th':.25};
-  const tempos=[], raw=[], tracks=[]; let ts=null;
+  const tempos=[], raw=[], tracks=[], measures=[]; let ts=null, keySig=null;
   [...root.children].filter(c=>c.nodeName==='part').forEach((part,ti)=>{
     let div=1, t=0, last=0, count=0; const open={};
-    for(const m of part.children) if(m.nodeName==='measure') for(const el of m.children){
+    for(const m of part.children) if(m.nodeName==='measure'){ if(ti===0) measures.push(t); for(const el of m.children){
       const nn=el.nodeName;
-      if(nn==='attributes'){ const d=kid(el,'divisions'); if(d) div=+d.textContent; const tm=kid(el,'time'); if(tm && !ts && kid(tm,'beats')) ts={n:parseInt(kid(tm,'beats').textContent), d:num(tm,'beat-type',4)}; }
+      if(nn==='attributes'){ const d=kid(el,'divisions'); if(d) div=+d.textContent; const ky=kid(el,'key'); if(ky && keySig==null && kid(ky,'fifths')) keySig=num(ky,'fifths'); const tm=kid(el,'time'); if(tm && !ts && kid(tm,'beats')) ts={n:parseInt(kid(tm,'beats').textContent), d:num(tm,'beat-type',4)}; }
       else if(nn==='direction' || nn==='sound'){
         const snd=nn==='sound'?el:el.querySelector('sound'), mt=el.querySelector('metronome');
         if(snd && snd.getAttribute('tempo')) tempos.push({q:t, bpm:+snd.getAttribute('tempo')});
@@ -1632,11 +1777,12 @@ function parseMusicXML(text){
         const midi=(num(pt,'octave')+1)*12 + PC[kid(pt,'step').textContent.trim()] + Math.round(num(pt,'alter'));
         const ties=[...el.children].filter(c=>c.nodeName==='tie').map(c=>c.getAttribute('type'));
         if(ties.includes('stop') && open[midi]){ open[midi].e=start+d; if(!ties.includes('start')) delete open[midi]; continue; }
-        const fg=el.querySelector('notations technical fingering'), n={track:ti, midi, s:start, e:start+d, staff:num(el,'staff')||undefined, finger:fg?(parseInt(fg.textContent)||undefined):undefined};
+        const step=kid(pt,'step').textContent.trim(), alter=Math.round(num(pt,'alter')), name=Math.abs(alter)<2 ? step+(alter>0?'#':alter<0?'b':'')+num(pt,'octave') : undefined;
+        const fg=el.querySelector('notations technical fingering'), n={track:ti, midi, name, s:start, e:start+d, staff:num(el,'staff')||undefined, finger:fg?(parseInt(fg.textContent)||undefined):undefined};
         raw.push(n); count++;
         if(ties.includes('start')) open[midi]=n;
       }
-    }
+    } }
     tracks.push({index:ti, name:names[part.id]||'Part '+(ti+1), count});
   });
   // song position (in quarter notes) -> seconds, following tempo changes
@@ -1644,10 +1790,11 @@ function parseMusicXML(text){
   if(!tl.length || tl[0].q>0) tl.unshift({q:0, bpm:tl.length?tl[0].bpm:100});
   let acc=0; tl.forEach((x,i)=>{ if(i) acc+=(x.q-tl[i-1].q)*60/tl[i-1].bpm; x.sec=acc; });
   const sec=q=>{ let s=tl[0]; for(const x of tl){ if(x.q<=q) s=x; else break; } return s.sec+(q-s.q)*60/s.bpm; };
-  let notes=raw.map(n=>({track:n.track, midi:n.midi, staff:n.staff, finger:n.finger, start:sec(n.s), dur:Math.max(0.06,sec(n.e)-sec(n.s)-0.02)}));
+  let notes=raw.map(n=>({track:n.track, midi:n.midi, name:n.name, staff:n.staff, finger:n.finger, start:sec(n.s), dur:Math.max(0.06,sec(n.e)-sec(n.s)-0.02)}));
   const first=notes.length?Math.min(...notes.map(n=>n.start)):0; notes.forEach(n=>n.start-=first);
+  const bars=measures.map(q=>+(sec(q)-first).toFixed(4)).filter(b=>b>0.01);
   const txt=sel=>{ const e=x.querySelector(sel); return e?e.textContent.trim():''; };
-  return {title:txt('work work-title')||txt('movement-title'), by:txt('identification creator[type="composer"]'), tracks:tracks.filter(t=>t.count), notes, beat:60/tl[0].bpm, ts};
+  return {title:txt('work work-title')||txt('movement-title'), by:txt('identification creator[type="composer"]'), tracks:tracks.filter(t=>t.count), notes, beat:60/tl[0].bpm, ts, keySig, bars};
 }
 async function unzipMusicXML(buf){   // .mxl is a zip: find the score named in META-INF/container.xml
   const v=new DataView(buf), u8=new Uint8Array(buf), dec=new TextDecoder(), files={};
