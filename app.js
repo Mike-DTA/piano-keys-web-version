@@ -15,6 +15,19 @@ const NAMES = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
 const SPEEDS = [0.25,0.4,0.5,0.6,0.7,0.8,0.9,1,1.1,1.25,1.5];
 const INTERVALS = [1,2,4,7,14,30,60];          // review intervals in days
 const TITLES = ['Beginner','Novice','Apprentice','Player','Performer','Musician','Virtuoso','Maestro'];
+/* Title tests: every title after Beginner is earned by playing a real piece from the song library: the whole song,
+   both hands, in Play along at full speed, with TEST_PASS% or more. Each test unlocks at a level; a title, once
+   earned, is never lost. They show up as their own category in Songs. */
+const TEST_PASS = 90;
+const TESTS = [
+  {song:'bach-minuet-a-minor', level:3},     // Novice
+  {song:'burgmuller-arabesque', level:5},    // Apprentice
+  {song:'traumerei', level:7},               // Player
+  {song:'kuhlau-sonatina', level:9},         // Performer
+  {song:'fur-elise-full', level:11},         // Musician
+  {song:'rondo-alla-turca', level:13},       // Virtuoso
+  {song:'maple-leaf-rag', level:15},         // Maestro
+].map((t,i)=>({...t, id:'test:'+t.song, rank:i+1, title:TITLES[i+1]}));
 
 /* ---------- Notation ---------- */
 function nameToMidi(s){
@@ -131,7 +144,7 @@ let profiles=loadProfiles();
 if(!profiles.list.some(p=>p.id===profiles.active)) profiles.active=profiles.list[0].id;
 const me=()=>profiles.list.find(p=>p.id===profiles.active);
 function saveProfiles(){ try{ localStorage.setItem(IKEY, JSON.stringify(profiles)); }catch(e){} }
-function blankProg(){ return {v:1, xp:0, lessons:{}, songs:{}, marks:{}, heat:{}, days:{}, skills:{}, ach:{}, counts:{drills:0,ear:0,sessions:0,runs:0,trainer:0,bestCombo:0}, history:[], bestDays:0, settings:{goal:10, sessionMin:10, drillMode:'wait'}, created:Date.now()}; }
+function blankProg(){ return {v:1, xp:0, lessons:{}, songs:{}, tests:{}, marks:{}, heat:{}, days:{}, skills:{}, ach:{}, counts:{drills:0,ear:0,sessions:0,runs:0,trainer:0,bestCombo:0}, history:[], bestDays:0, settings:{goal:10, sessionMin:10, drillMode:'wait'}, created:Date.now()}; }
 function loadProg(id=profiles.active){
   try{ const p=JSON.parse(localStorage.getItem(progKey(id))); if(p && p.v){ const b=blankProg(); return Object.assign(b,p,{counts:Object.assign(b.counts,p.counts), settings:Object.assign(b.settings,p.settings)}); } }catch(e){}
   const p=blankProg();
@@ -147,7 +160,14 @@ const dayOK=(k,p=prog)=>p.days[k] && p.days[k].sec>=60;
 function streak(p=prog){ const d=new Date(); if(!dayOK(dkey(d),p)) d.setDate(d.getDate()-1); let n=0; while(dayOK(dkey(d),p)){ n++; d.setDate(d.getDate()-1); } return n; }
 const totalSec=()=>Object.values(prog.days).reduce((s,d)=>s+d.sec,0);
 const lvlNeed=L=>50*L*(L-1);
-function levelInfo(xp){ let L=1; while(xp>=lvlNeed(L+1)) L++; return {L, cur:xp-lvlNeed(L), need:lvlNeed(L+1)-lvlNeed(L), title:TITLES[Math.min(TITLES.length-1,Math.floor((L-1)/2))]}; }
+function levelInfo(xp){ let L=1; while(xp>=lvlNeed(L+1)) L++; return {L, cur:xp-lvlNeed(L), need:lvlNeed(L+1)-lvlNeed(L)}; }
+const testPassed=(T,p=prog)=>!!(p.tests&&p.tests[T.id]&&p.tests[T.id].passed);
+const titleRank=(p=prog)=>TESTS.reduce((r,T)=>testPassed(T,p)?Math.max(r,T.rank):r,0);   // the highest test passed
+const titleOf=(p=prog)=>TITLES[titleRank(p)];
+const aTitle=t=>(/^(<b>)?[AEIOU]/.test(t)?'an ':'a ')+t;   // "an Apprentice", "a Novice"
+const testOpen=T=>levelInfo(prog.xp).L>=T.level;
+// the next title to aim for, above the one held (a test can be passed before its level, so a pro can skip ahead)
+const nextTest=()=>TESTS.find(T=>T.rank>titleRank());
 const starsFor=acc=> acc>=97?3 : acc>=90?2 : acc>=PASS?1 : 0;
 const starStr=n=>'★'.repeat(n)+'☆'.repeat(3-n);
 const best=id=>(prog.lessons[id]&&prog.lessons[id].best)||0;
@@ -173,7 +193,10 @@ function addXP(n){
   const before=levelInfo(prog.xp).L;
   prog.xp+=n; day().xp+=n;
   const after=levelInfo(prog.xp);
-  if(after.L>before) toast(`⬆️ Level ${after.L}: ${after.title}!`);
+  if(after.L>before){
+    const T=TESTS.find(T=>T.level>before && T.level<=after.L && T.rank>titleRank());   // (not one passed early)
+    toast(T ? `⬆️ Level ${after.L}! 🎓 You can attempt ${T.title} now, from your profile card` : `⬆️ Level ${after.L}!`);
+  }
 }
 function updSkill(tag,acc){ const s=prog.skills[tag]||(prog.skills[tag]={m:0,n:0}); s.m = s.n ? Math.round(s.m*0.7+acc*0.3) : acc; s.n++; }
 function updateLesson(id,acc){
@@ -513,7 +536,7 @@ function startItem(it, listen=false){
   togglePlay();
 }
 function isCounting(){ const d=cur.def; return mode===d.mode && (hands==='both'||!d.both); }
-function runXP(acc,res){ let xp=Math.round(stats.hit*acc/100*0.5)+(acc>=PASS?5:0); if(res.firstPass) xp+=25; xp+=Math.max(0,res.newStars||0)*10; return Math.max(1,xp); }
+function runXP(acc,res){ let xp=Math.round(stats.hit*acc/100*0.5)+(acc>=PASS?5:0); if(res.firstPass) xp+=25; if(res.test&&res.test.passedNow) xp+=50; xp+=Math.max(0,res.newStars||0)*10; return Math.max(1,xp); }
 
 function recordRun(acc){
   if(!cur || mode==='listen' || stats.hit+stats.wrong+stats.miss===0) return null;
@@ -523,6 +546,17 @@ function recordRun(acc){
   if(cur.song && !partial && (hands==='both' || !d.both)){   // whole song, played with every hand it needs
     const r=prog.songs[cur.song.id]||(prog.songs[cur.song.id]={best:0, plays:0});
     res.prevBest=r.best; r.best=Math.max(r.best,acc); r.plays++; r.last=Date.now(); res.songBest=r.best;
+  }
+  if(cur.song && cur.song.test){   // a title test only counts when played by its rules
+    const T=cur.song.test;
+    const why = partial ? 'from the very start, without skipping'
+      : mode!=='play' ? 'in Play along' : Math.abs(speed-1)>1e-6 ? 'at full speed (100%)'
+      : d.both && hands!=='both' ? 'with both hands' : null;
+    res.test={T, why};   // (its level only decides when the profile card offers it: passing it earlier counts too)
+    if(!why){
+      const r=prog.tests[T.id]||(prog.tests[T.id]={best:0}); r.best=Math.max(r.best,acc);
+      if(acc>=TEST_PASS && !r.passed){ const before=titleRank(); r.passed=Date.now(); res.test.passedNow=true; res.test.newTitle=titleRank()>before; }
+    }
   }
   if(cur.kind==='drill'){ prog.counts.drills++; if(d.ear && acc>=PASS) prog.counts.ear++; }
   if(hands==='both') for(const s of d.skills||[]) updSkill(s, acc);
@@ -594,11 +628,23 @@ function freeFinish(acc,res){
     const play = cur&&cur.song ? [{label:'▶ Play it',primary:true,fn:()=>startItem(cur)}] : [];
     return setResult(song.title,null,'♪','Now try it yourself.',[...play, back]);
   }
+  if(res && res.test) return testFinish(acc,res,back);
   let detail=statLine();
   if(res && res.songBest!=null) detail+=` · personal best ${res.songBest}%`;
   else if(cur && cur.song) detail+=' · one-hand practice (play both hands to set a best score)';
   const title = res && res.songBest!=null && res.prevBest && acc>res.prevBest ? '🎉 New best · '+song.title : song.title;
   setResult(title, cur&&cur.song?starsFor(acc):null, acc+'%', detail, [{label:'Again',primary:true,fn:()=>{restart();togglePlay();}},{label:'⚡ Speed trainer',fn:()=>startTrainer(cur)},back], {xp:res&&res.xp});
+}
+function testFinish(acc,res,back){
+  const {T,why,passedNow,newTitle}=res.test, e=cur.song, again={label:'Again',primary:true,fn:()=>startSong(e,false)};
+  const practise={label:'🎻 Practise it',fn:()=>{ closeResult(); openScreen('songs'); showSong(songById(T.song)); }};
+  if(passedNow){ if(newTitle) toast(`🎓 You're now ${aTitle(T.title)}!`);
+    return setResult(newTitle?`🎓 You're now ${aTitle(T.title)}!`:`🎓 ${T.title} test passed`, starsFor(acc), acc+'%',
+      `${statLine()}. ${newTitle?`The title ${T.title} is yours to keep.`:`You already hold a higher title, so it stays.`}`, [back, {label:'Again',fn:again.fn}], {xp:res.xp}); }
+  if(why) return setResult(`${T.title} test · didn't count`, null, acc+'%', `A test only counts when it's played ${why}. Start it again from the Title tests list.`, [again, practise, back], {xp:res.xp});
+  const best=prog.tests[T.id].best;
+  if(testPassed(T)) return setResult(`${T.title} test`, starsFor(acc), acc+'%', `${statLine()} · best test score ${best}%. Already passed.`, [again, back], {xp:res.xp});
+  setResult(`${T.title} test · not yet`, starsFor(acc), acc+'%', `You need ${TEST_PASS}% to earn the title ${T.title}${best>acc?` (your best is ${best}%)`:''}. ${statLine()}.`, [again, practise, back], {xp:res.xp});
 }
 function lessonFinish(acc,res){
   const L=cur.lesson, pass=acc>=PASS, counts=res&&res.counts;
@@ -1141,9 +1187,21 @@ function goalRing(size=64){
   const g=prog.settings.goal, m=day().sec/60, f=Math.min(1,m/g), r=size/2-5, c=2*Math.PI*r;
   return `<div class="ring" style="width:${size}px;height:${size}px"><svg width="${size}" height="${size}"><circle cx="${size/2}" cy="${size/2}" r="${r}" fill="none" stroke="${'#20263f'}" stroke-width="6"/><circle cx="${size/2}" cy="${size/2}" r="${r}" fill="none" stroke="${f>=1?C.good:C.accent}" stroke-width="6" stroke-linecap="round" stroke-dasharray="${c*f} ${c}" transform="rotate(-90 ${size/2} ${size/2})"/></svg><span>${Math.floor(m)}/${g}<small>min</small></span></div>`;
 }
+// the next title test, straight from the profile card (Home and Progress)
+async function attemptTest(T){
+  if(!T) return;
+  try{ await loadLibrary(); const e=testEntries().find(x=>x.test===T); await songDef(e);
+    toast(`🎓 ${T.title} test: the whole song, both hands, Play along at full speed. ${TEST_PASS}% to pass.`);
+    startSong(e,false);
+  }catch(err){ toast('⚠ '+(err.message||err)); }
+}
+B.addEventListener('click',ev=>{ if(ev.target.closest('#attempt')) attemptTest(nextTest()); });
 function heroHTML(){
   const li=levelInfo(prog.xp);
-  return `<div class="hero"><span class="avatar">${me().emoji}</span><div class="lv"><b>${esc(me().name)}</b> · Level ${li.L} · ${li.title}<div class="xpbar"><i style="width:${100*li.cur/li.need}%"></i></div><small class="muted">${li.cur} / ${li.need} XP to level ${li.L+1}</small></div>
+  const T=nextTest();
+  return `<div class="hero"><span class="avatar">${me().emoji}</span><div class="lv"><b>${esc(me().name)}</b> · Level ${li.L} · ${titleOf()}<div class="xpbar"><i style="width:${100*li.cur/li.need}%"></i></div><small class="muted">${li.cur} / ${li.need} XP to level ${li.L+1}</small>
+    ${!T?'':testOpen(T)?`<button class="primary nexttest" id="attempt" title="${esc(`${T.title} test: the whole song, both hands, Play along at full speed. ${TEST_PASS}% to pass.`)}">🎓 Attempt ${T.title}</button>`
+       :`<small class="muted nexttest">🎓 Attempt ${T.title} at level ${T.level}</small>`}</div>
     <div class="pill"><b>🔥 ${streak()}</b><small>day streak</small></div><div class="pill"><b>${nPassed()}</b><small>of ${ALL_LESSONS.length} lessons</small></div>${goalRing()}</div>`;
 }
 
@@ -1211,7 +1269,13 @@ function loadLibrary(){   // songs.js is only fetched when needed (or once the a
     document.head.appendChild(el);
   }));
 }
-const songById=id=>id.startsWith('my:') ? myEntries().find(s=>s.id===id) : self.SONGS.find(s=>s.id===id);
+const songById=id=>id.startsWith('my:') ? myEntries().find(s=>s.id===id) : id.startsWith('test:') ? testEntries().find(s=>s.id===id) : self.SONGS.find(s=>s.id===id);
+// the title tests as songs of their own (a copy of the library entry, so scores, saved parts and mode stay separate)
+let testSongs=null;
+function testEntries(){
+  if(!self.SONGS) return [];
+  return testSongs || (testSongs=TESTS.map(T=>{ const src=SONGS.find(s=>s.id===T.song); if(!src) return null; const {def,...e}=src; return Object.assign(e,{id:T.id, cat:'tests', test:T}); }).filter(Boolean));
+}
 async function songDef(e){   // notes are parsed (or the MIDI file fetched) the first time a song is opened
   if(e.def) return e.def;
   let d;
@@ -1230,7 +1294,12 @@ async function songDef(e){   // notes are parsed (or the MIDI file fetched) the 
   return e.def=prep(d);
 }
 const songItem=e=>({kind:'free', song:e, def:e.def, title:e.title, sub:'🎵 Song'});
-function startSong(e,listen){ session=null; trainer=null; e.def.mode=prog.settings.songMode||'wait'; startItem(songItem(e),listen); }
+function startSong(e,listen){
+  session=null; trainer=null;
+  if(e.test){ e.def.mode='play'; setSpeed(1); setHands('both'); }   // a title test: Play along, full speed, both hands
+  else e.def.mode=prog.settings.songMode||'wait';
+  startItem(songItem(e),listen);
+}
 
 let localWait=null, localGaveUp=false;
 function renderSongs(){
@@ -1246,11 +1315,11 @@ function renderSongs(){
   }
   const mine=mySongs||[];
   const songCourse=LESSON.p1.course;
-  if(songCat==='mine' && !mine.length) songCat='';
+  if((songCat==='mine' && !mine.length) || songCat==='tests') songCat='';   // (Title tests have no filter: they're always at the bottom)
   B.innerHTML=`${!mySongs && (dbWaiting || localGaveUp) ? '<p class="notice">⚠ My songs and recordings can\'t open yet. This usually means Keys is also open in another tab or as the installed app, with an older version. Close that and they\'ll appear here.</p>' : ''}
   <input id="sq" class="search" type="search" placeholder="Search ${SONGS.length+mine.length} songs, composers or saved parts" value="${esc(songQ)}" autocomplete="off">
   <div class="chips" id="slv">${[0,1,2,3].map(k=>`<button data-l="${k}" class="${k===songLvl?'on':''}">${k?dots(k)+' '+LEVELS[k]:'All levels'}</button>`).join('')}</div>
-  <div class="chips" id="sct"><button data-c="" class="${songCat?'':'on'}">All</button>${Object.entries(songCats()).map(([k,l])=>`<button data-c="${k}" class="${k===songCat?'on':''}">${l}</button>`).join('')}</div>
+  <div class="chips" id="sct"><button data-c="" class="${songCat?'':'on'}">All</button>${Object.entries(songCats()).filter(([k])=>k!=='tests').map(([k,l])=>`<button data-c="${k}" class="${k===songCat?'on':''}">${l}</button>`).join('')}</div>
   ${savedPartsHTML()}
   ${recordingsHTML()}
   <div id="slist"></div>
@@ -1264,8 +1333,9 @@ function renderSongs(){
   </div>`;
   renderSongList();
   $('#sq').oninput=e=>{ songQ=e.target.value; renderSongList(); };
-  bind('#slv button',el=>{ songLvl=+el.dataset.l; renderSongs(); });
-  bind('#sct button',el=>{ songCat=el.dataset.c; renderSongs(); });
+  // tapping the filter that's already on goes back to All
+  bind('#slv button',el=>{ songLvl = +el.dataset.l===songLvl ? 0 : +el.dataset.l; renderSongs(); });
+  bind('#sct button',el=>{ songCat = el.dataset.c===songCat ? '' : el.dataset.c; renderSongs(); });
   bind('.sl',el=>showIntro(LESSON[el.dataset.id]));
   bind('#openMid',()=>$('#file').click());
   bind('.pp',el=>startItem(genPop(el.dataset.p)));
@@ -1279,7 +1349,7 @@ function savedPartsHTML(){   // every saved part of this player, in songs and le
 }
 let songBase=[];
 function renderSongList(){
-  songBase=[...myEntries(), ...SONGS].filter(s=>(!songLvl||s.level===songLvl) && (!songCat||s.cat===songCat) && matches(songHay(s),songQ));
+  songBase=[...myEntries(), ...SONGS, ...testEntries()].filter(s=>(!songLvl||s.level===songLvl) && (!songCat||s.cat===songCat) && matches(songHay(s),songQ));
   const cats=Object.entries(songCats()).filter(([c])=>songBase.some(s=>s.cat===c));
   $('#slist').innerHTML = !songBase.length ? '<p class="muted">No songs match your search.</p>' :
     cats.map(([c,label])=>`<div class="sechead"><h2 class="sec">${label} <span class="muted" id="sn-${c}"></span></h2>`+
@@ -1289,7 +1359,10 @@ function renderSongList(){
 }
 function fillCat(c){   // one category section, filtered by its own search box
   const all=songBase.filter(s=>s.cat===c), ss=all.filter(s=>matches(songHay(s),catQ[c]||''));
-  const row=s=>{ const r=prog.songs[s.id];
+  const row=s=>{ const r=prog.songs[s.id], T=s.test;
+    if(T){ const ok=testPassed(T), open=testOpen(T), tb=(prog.tests[T.id]||{}).best;
+      return `<button class="song test${ok?' done':''}" data-id="${s.id}"><span class="t"><b>${ok?'✓':'🎓'} ${T.title} · ${esc(s.title)}</b><small>${esc(s.by)}</small></span>
+        ${tb?`<span class="s" title="Your best test score"><small>${tb}%</small></span>`:''}${s.level?`<span class="lvl" title="${LEVELS[s.level]}">${dots(s.level)}</span>`:''}</button>`; }
     return `<button class="song" data-id="${s.id}"><span class="t"><b>${esc(s.title)}</b><small>${esc(s.by)}</small></span>
       ${r&&r.best?`<span class="s" title="Your best">${starStr(starsFor(r.best))}<small>${r.best}%</small></span>`:''}${s.level?`<span class="lvl" title="${LEVELS[s.level]}">${dots(s.level)}</span>`:''}</button>`; };
   $('#sn-'+c).textContent = ss.length<all.length ? `· ${ss.length} of ${all.length}` : `· ${all.length}`;
@@ -1300,22 +1373,26 @@ function fillCat(c){   // one category section, filtered by its own search box
 async function showSong(e){
   let d; try{ d=await songDef(e); }catch(err){ return toast('⚠ '+err.message); }
   const r=prog.songs[e.id], len=d.notes.reduce((m,n)=>Math.max(m,n.start+n.dur),0), card=$('#introCard');
-  const M=e.mine;
-  card.innerHTML=`<div class="kicker">${songCats()[e.cat]}${e.level?` · ${dots(e.level)} ${LEVELS[e.level]}`:''}</div>
+  const M=e.mine, T=e.test, tr=T&&prog.tests[T.id];
+  card.innerHTML=`<div class="kicker">${T?`🎓 Title test · ${T.title}`:songCats()[e.cat]}${e.level?` · ${dots(e.level)} ${LEVELS[e.level]}`:''}</div>
     ${M?`<input id="sgTitle" class="search title" maxlength="80" value="${esc(e.title)}" aria-label="Song title">`:`<h2>${esc(e.title)}</h2>`}<p class="muted">${esc(e.by)}</p>
-    <div class="meta">${fmtTime(len)} at full speed · ${d.both?'both hands':'one hand'}${r?` · best ${r.best}% · played ${r.plays}×`:''}</div>
-    ${d.both?`<div class="seg" id="sgHands"><button data-h="right">Right hand</button><button data-h="left">Left hand</button><button data-h="both">Both hands</button></div><br>`:''}
-    <div class="seg" id="sgMode"><button data-m="wait">⏸ Wait for me</button><button data-m="play">⏱ Play along</button></div>
+    <div class="meta">${fmtTime(len)} at full speed · ${d.both?'both hands':'one hand'}${r?` · played ${r.plays}×`:''}${T?(tr&&tr.best?` · best test score ${tr.best}%`:''):r?` · best ${r.best}%`:''}</div>
+    ${T?`<p class="testrules">${testPassed(T)?`✓ Passed: you're ${aTitle(`<b>${T.title}</b>`)}. You can still play it to beat your score.`
+        :`Earn the title <b>${T.title}</b>: play the whole song with both hands in <b>Play along</b> at full speed and score <b>${TEST_PASS}%</b> or more.`}
+        ${testPassed(T)?'':` Practise it first in ${songCats()[songById(T.song).cat]}, where you can slow it down, take one hand at a time or use Wait for me.`}</p>`
+    :`${d.both?`<div class="seg" id="sgHands"><button data-h="right">Right hand</button><button data-h="left">Left hand</button><button data-h="both">Both hands</button></div><br>`:''}
+    <div class="seg" id="sgMode"><button data-m="wait">⏸ Wait for me</button><button data-m="play">⏱ Play along</button></div>`}
     ${marksFor(e.id).length?`<div class="meta">🔖 Saved parts:</div><div class="marks">${marksFor(e.id).map((m,i)=>`<button class="mk" data-i="${i}">${markDot(m)}▶ <b>${esc(m.label)}</b> <small class="muted">${fmtTime(m.t)}</small></button>`).join('')}</div>`:''}
     ${heatHTML(e.id)}
     ${M&&M.tracks.length>1?`<div class="meta">Instruments to play:</div><div class="tracks">${M.tracks.map(t=>`<label><input type="checkbox" data-t="${t.index}"${M.on.includes(t.index)?' checked':''}> ${esc(t.name)} <small>(${t.count})</small></label>`).join('')}</div>`:''}
-    <div class="btns"><button class="primary" id="sgStart">▶ Start</button><button id="sgListen">👂 Listen</button><button id="sgTrain">⚡ Speed trainer</button><button id="sgBack">Back</button>${M?'<button id="sgDel" class="danger">Remove</button>':''}</div>`;
+    <div class="btns"><button class="primary" id="sgStart">▶ ${T?'Take the test':'Start'}</button><button id="sgListen">👂 Listen</button>${T?`<button id="sgPractise">🎻 Practise it</button>`:'<button id="sgTrain">⚡ Speed trainer</button>'}<button id="sgBack">Back</button>${M?'<button id="sgDel" class="danger">Remove</button>':''}</div>`;
   const seg=(id,key,get,set)=>{ const el=$(id); if(!el) return; const sync=()=>el.querySelectorAll('button').forEach(b=>b.classList.toggle('on',b.dataset[key]===get())); el.querySelectorAll('button').forEach(b=>b.onclick=()=>{ set(b.dataset[key]); sync(); }); sync(); };
   seg('#sgHands','h',()=>hands,setHands);
   seg('#sgMode','m',()=>prog.settings.songMode||'wait',m=>{ prog.settings.songMode=m; saveProg(); });
   $('#sgStart').onclick=()=>startSong(e,false);
   $('#sgListen').onclick=()=>startSong(e,true);
-  $('#sgTrain').onclick=()=>startTrainer(songItem(e));
+  if(T) $('#sgPractise').onclick=()=>showSong(songById(T.song));   // the same piece in its normal category
+  else $('#sgTrain').onclick=()=>startTrainer(songItem(e));
   $('#sgBack').onclick=()=>{ $('#intro').hidden=true; };
   card.querySelectorAll('.mk').forEach(b=>b.onclick=()=>startAtMark(e.id,+b.dataset.i));
   bindHeat(card,e.id);
@@ -1359,7 +1436,7 @@ async function loadMySongs(){
 }
 const saveMySong=r=>dbDo(true,st=>st.put(r)).catch(()=>toast('⚠ Could not save on this device'));
 const deleteMySong=id=>dbDo(true,st=>st.delete(id));
-const songCats=()=>Object.assign(mySongs&&mySongs.length?{mine:'📁 My songs'}:{}, self.SONG_CATS);
+const songCats=()=>Object.assign(mySongs&&mySongs.length?{mine:'📁 My songs'}:{}, self.SONG_CATS, {tests:'🎓 Title tests'});
 function myEntries(){
   return (mySongs||[]).map(r=>myMap.get(r.id) || myMap.set(r.id,{id:'my:'+r.id, title:r.title, by:r.by||r.file, cat:'mine', level:0, mine:r}).get(r.id));
 }
