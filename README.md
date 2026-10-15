@@ -33,7 +33,23 @@ Connect the piano with a USB-OTG cable and allow MIDI access.
   lessons, song scores, XP, streak, daily goal and settings. With more than one player the app opens on
   *Who's playing?* (and asks again after 20 minutes away); switch any time from the name button in the menu
   or the avatar in the keyboard bar. Add, rename (with an avatar) or delete players there.
-- **🏠 Home:** level & XP, day streak, daily-goal ring, *Today's practice*, continue learning, review.
+- **🏠 Home:** level & XP, title, day streak, daily-goal ring, *Today's practice*, continue learning, review.
+- **🎓 Title tests:** titles aren't given for levels; you earn them. Each one is a real piece, played as a test: the whole
+  song, both hands, in Play along at full speed, with 90% or more. When you reach a test's level, an **Attempt**
+  button on the profile card (Home and Progress) starts it. A title once earned is never lost.
+  All tests are also listed at the bottom of Songs (no filter chip), where any of them can be played any time:
+  passing one before its level earns the title too, so experienced players can catch up right away.
+  Practise it opens the same piece in its normal category.
+
+  | Title | Test | Offered at |
+  |---|---|---|
+  | Novice | Minuet in A minor (Bach) | level 3 |
+  | Apprentice | L'Arabesque (Burgmüller) | level 6 |
+  | Player | Träumerei (Schumann) | level 10 |
+  | Performer | Sonatina in C, 1st movement (Kuhlau) | level 15 |
+  | Musician | Für Elise, complete (Beethoven) | level 21 |
+  | Virtuoso | Rondo alla Turca (Mozart) | level 28 |
+  | Maestro | Maple Leaf Rag (Joplin) | level 36 |
 - **🎓 Lessons:** 58 lessons in 7 courses: Basics, Rhythm, Chords, Scales & keys, Music theory, Two hands, Songs.
   Pass with 80% (★ 80, ★★ 90, ★★★ 97). Chord lessons require all chord keys held together.
   The Lessons screen has a search that also looks inside the lessons, so topics like "waltz" or "F sharp" find them.
@@ -43,7 +59,7 @@ Connect the piano with a USB-OTG cable and allow MIDI access.
   key signatures and the circle of fifths, how chords are built, Roman numerals, time signatures (6/8),
   the harmonic minor and cadences, each with an exercise.
 - **🎵 Songs:** 71 public-domain pieces (children's songs, folk & hymns, holiday, classical — including 30 piano originals from the Mutopia Project), with search and
-  filters by level and category, plus a search box per category. Each has right- and left-hand parts; pick hands, Wait or Play along, Listen,
+  filters by level and category (tap a selected filter again to go back to All), plus a search box per category. Each has right- and left-hand parts; pick hands, Wait or Play along, Listen,
   or the speed trainer. Your best score is saved per song. Also links to the song lessons and the pop chord drills.
 - **📁 My songs:** import your own MIDI (`.mid`) or MusicXML (`.musicxml`, `.xml`, `.mxl`) files, e.g. scores you've
   bought or downloaded from MuseScore. They're stored on the device (IndexedDB), shared by all players, with
@@ -88,6 +104,10 @@ Connect the piano with a USB-OTG cable and allow MIDI access.
   under Songs → Your recordings, and can be downloaded as `.mid` files.
 - **Keyboard view:** hands (practise one hand while the app plays the other), speed, 🥁 metronome
   (accent on beat 1, count-in), sound, note names/fingers with adjustable size (Aa off/S/M/L/XL, saved per player), fullscreen.
+- **🎹 Realistic piano:** the button next to 🔊 switches every sound in Keys (your key presses, the song, Listen and
+  replays) to MIDI-Creator's "Fancy" piano: each key, its soundboard, the ringing top strings and a hall are calculated
+  on your device (a few seconds, the first time per visit; nothing is downloaded). Saved per player. The code is in
+  `fancy-piano.js`; its sound maths is copied unchanged from MIDI-Creator, so updates there can be copied over whole.
 
 ## Notation (content.js)
 Tokens separated by spaces; a token is notes joined with `+`, then optional `:beats` to advance (default 1). `R` = rest.
@@ -134,6 +154,13 @@ function openInKeys(bytes, title){
 }
 ```
 Passing the name `'keys'` reuses the same Keys tab for every song.
+
+**Bookmarks** become saved parts of the song, for every player (each player's changes stay their own). Keys reads
+them from the MIDI file: every marker (meta event `FF 06`, the name) is one, and a sequencer-specific event
+(`FF 7F`, data `7D 'M' 'C' 'B' 'M' r g b`, as MIDI-Creator writes) right after it at the same tick gives its color.
+Markers from other programs come through too. A link can also send them as `&bm=` plus URI-encoded JSON,
+`[{"t":12.5,"n":"Chorus","c":"#60a5fa"}]` with `t` in seconds from the start of the file; that's used only when the
+file has no markers.
 
 ## Adding lessons
 Add an entry to a course in `COURSES` (content.js), its id to `PATH`, and its theory to `THEORY`

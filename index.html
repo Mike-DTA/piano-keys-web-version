@@ -58,7 +58,8 @@ canvas{position:absolute;inset:0;width:100%;height:100%;display:block;touch-acti
 #tlThumb{position:absolute;top:50%;left:0;width:16px;height:16px;margin:-8px 0 0 -8px;border-radius:50%;background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.5);transition:transform .12s}
 #tl.drag #tlThumb,#tl:hover #tlThumb{transform:scale(1.25)}
 .tmark{position:absolute;top:-7px;width:16px;height:20px;margin-left:-8px;cursor:pointer}
-.tmark::before{content:"";position:absolute;left:6.5px;top:0;width:3px;height:20px;border-radius:2px;background:var(--star)}
+.tmark::before{content:"";position:absolute;left:6.5px;top:0;width:3px;height:20px;border-radius:2px;background:var(--mc,var(--star))}
+.mdot{display:inline-block;flex:none;width:9px;height:9px;border-radius:50%;background:var(--mc);margin-right:6px;vertical-align:middle;box-shadow:0 0 0 1px rgba(0,0,0,.25)}
 .loopchip{border-color:var(--good)!important;color:var(--good);font-size:13px;max-width:180px;overflow:hidden;text-overflow:ellipsis}
 @media (max-width:640px){ #transport{flex-wrap:wrap;row-gap:0} #transport #play{min-width:44px} #tl{order:9;flex-basis:100%;height:28px} #tDur{margin-left:auto} }
 
@@ -131,6 +132,7 @@ h2.sec{font-size:13px;text-transform:uppercase;letter-spacing:.07em;color:var(--
 .hero{display:flex;gap:14px;align-items:center;flex-wrap:wrap;background:var(--panel);border-radius:14px;padding:14px}
 .hero .lv{flex:1;min-width:200px}
 .hero .lv b{font-size:18px}
+.hero .nexttest{display:block;margin-top:6px}.hero button.nexttest{display:block;width:fit-content;margin-top:8px;padding:6px 12px;font-size:14px}
 .xpbar{height:8px;background:var(--panel2);border-radius:4px;overflow:hidden;margin:6px 0 3px}
 .xpbar i{display:block;height:100%;background:var(--star);border-radius:4px}
 .pill{display:flex;flex-direction:column;align-items:center;min-width:72px}
@@ -172,6 +174,8 @@ h2.sec{font-size:13px;text-transform:uppercase;letter-spacing:.07em;color:var(--
 .song .s{color:var(--star);font-size:12px;letter-spacing:1px;text-align:right;flex:none}
 .song .s small{display:block;letter-spacing:0}
 .song .lvl{color:var(--accent);font-size:11px;letter-spacing:1px;flex:none}
+.song.test.done{border-color:var(--good)}.song.test.done b{color:var(--good)}
+.testrules{background:var(--panel2);border-radius:10px;padding:10px 12px;margin:0 0 12px;line-height:1.45}
 
 /* Progress */
 .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px}
@@ -282,6 +286,7 @@ h2.sec{font-size:13px;text-transform:uppercase;letter-spacing:.07em;color:var(--
       <button id="recBtn" class="ic rec" title="Record yourself, to replay later" aria-label="Record"></button>
       <button id="metro" aria-pressed="false" title="Metronome">🥁</button>
       <button id="sound" aria-pressed="false" title="Hear the song while playing along">🔊</button>
+      <button id="fancy" aria-pressed="false" title="Realistic piano sound (from MIDI-Creator)">🎹</button>
       <select id="labels" aria-label="Size of note names and finger numbers" title="Size of note names and finger numbers"></select>
       <button id="fs" title="Fullscreen">⛶</button>
       <button id="midi" class="chip">Connect piano</button>
@@ -325,6 +330,7 @@ h2.sec{font-size:13px;text-transform:uppercase;letter-spacing:.07em;color:var(--
 <input type="file" id="importFile" accept=".json,application/json" hidden>
 <input type="file" id="file" multiple hidden>
 
+<script src="fancy-piano.js"></script>
 <script src="content.js"></script>
 <script src="app.js"></script>
 </body>

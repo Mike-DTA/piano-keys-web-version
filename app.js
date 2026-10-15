@@ -9,11 +9,26 @@ const LEAD = 2.5;      // seconds of song-time before the first note
 const LOOK = 3;        // seconds of song-time visible above the keyboard
 const WIN = 0.25;      // play-along hit window (song seconds, either side)
 const EARLY = 1.0;     // wait mode: how early a note may be played
+const CHORD_SLACK = 0.1;   // wait mode: notes this soon after a chord (MIDI files from a real performance) count as part of it
 const PASS = 80;       // % needed to complete a lesson
 const NAMES = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
 const SPEEDS = [0.25,0.4,0.5,0.6,0.7,0.8,0.9,1,1.1,1.25,1.5];
 const INTERVALS = [1,2,4,7,14,30,60];          // review intervals in days
 const TITLES = ['Beginner','Novice','Apprentice','Player','Performer','Musician','Virtuoso','Maestro'];
+/* Title tests: every title after Beginner is earned by playing a real piece from the song library: the whole song,
+   both hands, in Play along at full speed, with TEST_PASS% or more. The profile card offers each test from its level
+   (each step one level longer than the last: 3, 6, 10, 15 …); at the bottom of Songs they can be played any time,
+   and passing one early counts too. A title, once earned, is never lost. */
+const TEST_PASS = 90;
+const TESTS = [
+  {song:'bach-minuet-a-minor', level:3},     // Novice
+  {song:'burgmuller-arabesque', level:6},    // Apprentice
+  {song:'traumerei', level:10},              // Player
+  {song:'kuhlau-sonatina', level:15},        // Performer
+  {song:'fur-elise-full', level:21},         // Musician
+  {song:'rondo-alla-turca', level:28},       // Virtuoso
+  {song:'maple-leaf-rag', level:36},         // Maestro
+].map((t,i)=>({...t, id:'test:'+t.song, rank:i+1, title:TITLES[i+1]}));
 
 /* ---------- Notation ---------- */
 function nameToMidi(s){
@@ -61,7 +76,7 @@ function parseMidiFile(buf){
   if(str(4)!=='MThd') throw new Error('Not a MIDI file');
   const hlen=u32(); u16(); const ntr=u16(), div=u16(); p = 8+hlen;
   if(div & 0x8000) throw new Error('SMPTE-timed MIDI files are not supported');
-  const tempos=[{tick:0,usq:500000}], raw=[], tracks=[]; let ts=null;
+  const tempos=[{tick:0,usq:500000}], raw=[], tracks=[], marks=[]; let ts=null;
   for(let ti=0; p+8<=v.byteLength && tracks.length<ntr; ti++){
     const id=str(4), len=u32(), end=Math.min(p+len, v.byteLength);
     if(id!=='MTrk'){ p=end; continue; }
@@ -75,6 +90,10 @@ function parseMidiFile(buf){
         if(type===0x03 && !name){ name=str(l).replace(/[^\x20-\x7e]/g,'').trim(); continue; }
         if(type===0x58 && !ts) ts={n:v.getUint8(p), d:2**v.getUint8(p+1)};
         if(type===0x51) tempos.push({tick, usq:(v.getUint8(p)<<16)|(v.getUint8(p+1)<<8)|v.getUint8(p+2)});
+        if(type===0x06) marks.push({tick, label:new TextDecoder().decode(new Uint8Array(buf,p,Math.min(l,end-p))).replace(/\0/g,'').trim().slice(0,40)||'Marker'});   // marker: becomes a saved part
+        if(type===0x7f && l===8 && String.fromCharCode(...new Uint8Array(buf,p,5))==='\x7dMCBM'){   // MIDI-Creator bookmark color for the marker just before it
+          const m=marks[marks.length-1]; if(m && m.tick===tick) m.c='#'+[5,6,7].map(i=>v.getUint8(p+i).toString(16).padStart(2,'0')).join('');
+        }
         p += l;
       } else if(st===0xf0 || st===0xf7){ p += vlq(); }
       else {
@@ -95,7 +114,16 @@ function parseMidiFile(buf){
   const first = notes.length ? Math.min(...notes.map(n=>n.start)) : 0;
   notes.forEach(n=>n.start-=first);
   const t0 = tempos.filter(t=>t.tick===0).pop();
-  return {tracks:tracks.filter(t=>t.count>0), notes, beat:t0.usq/1e6, ts};
+  return {tracks:tracks.filter(t=>t.count>0), notes, beat:t0.usq/1e6, ts, lead:first,
+          marks:cleanMarks(marks.map(m=>({t:toSec(m.tick), label:m.label, c:m.c})), first)};
+}
+/* Bookmarks from MIDI-Creator (markers in the file, or &bm= in the link) are in seconds from the start of the file;
+   songs start at their first note, so they move back by that much. */
+function cleanMarks(list, lead=0){
+  return (Array.isArray(list)?list:[]).filter(m=>m && isFinite(m.t) && m.t>=0)
+    .map(m=>Object.assign({t:+Math.max(0,m.t-lead).toFixed(2), label:String(m.label==null?'Bookmark':m.label).trim().slice(0,40)||'Bookmark'},
+                          /^#[0-9a-f]{6}$/i.test(m.c) ? {c:m.c.toLowerCase()} : {}))
+    .sort((a,b)=>a.t-b.t);
 }
 
 /* ---------- Content index ---------- */
@@ -117,7 +145,7 @@ let profiles=loadProfiles();
 if(!profiles.list.some(p=>p.id===profiles.active)) profiles.active=profiles.list[0].id;
 const me=()=>profiles.list.find(p=>p.id===profiles.active);
 function saveProfiles(){ try{ localStorage.setItem(IKEY, JSON.stringify(profiles)); }catch(e){} }
-function blankProg(){ return {v:1, xp:0, lessons:{}, songs:{}, marks:{}, heat:{}, days:{}, skills:{}, ach:{}, counts:{drills:0,ear:0,sessions:0,runs:0,trainer:0,bestCombo:0}, history:[], bestDays:0, settings:{goal:10, sessionMin:10, drillMode:'wait'}, created:Date.now()}; }
+function blankProg(){ return {v:1, xp:0, lessons:{}, songs:{}, tests:{}, marks:{}, heat:{}, days:{}, skills:{}, ach:{}, counts:{drills:0,ear:0,sessions:0,runs:0,trainer:0,bestCombo:0}, history:[], bestDays:0, settings:{goal:10, sessionMin:10, drillMode:'wait'}, created:Date.now()}; }
 function loadProg(id=profiles.active){
   try{ const p=JSON.parse(localStorage.getItem(progKey(id))); if(p && p.v){ const b=blankProg(); return Object.assign(b,p,{counts:Object.assign(b.counts,p.counts), settings:Object.assign(b.settings,p.settings)}); } }catch(e){}
   const p=blankProg();
@@ -133,7 +161,14 @@ const dayOK=(k,p=prog)=>p.days[k] && p.days[k].sec>=60;
 function streak(p=prog){ const d=new Date(); if(!dayOK(dkey(d),p)) d.setDate(d.getDate()-1); let n=0; while(dayOK(dkey(d),p)){ n++; d.setDate(d.getDate()-1); } return n; }
 const totalSec=()=>Object.values(prog.days).reduce((s,d)=>s+d.sec,0);
 const lvlNeed=L=>50*L*(L-1);
-function levelInfo(xp){ let L=1; while(xp>=lvlNeed(L+1)) L++; return {L, cur:xp-lvlNeed(L), need:lvlNeed(L+1)-lvlNeed(L), title:TITLES[Math.min(TITLES.length-1,Math.floor((L-1)/2))]}; }
+function levelInfo(xp){ let L=1; while(xp>=lvlNeed(L+1)) L++; return {L, cur:xp-lvlNeed(L), need:lvlNeed(L+1)-lvlNeed(L)}; }
+const testPassed=(T,p=prog)=>!!(p.tests&&p.tests[T.id]&&p.tests[T.id].passed);
+const titleRank=(p=prog)=>TESTS.reduce((r,T)=>testPassed(T,p)?Math.max(r,T.rank):r,0);   // the highest test passed
+const titleOf=(p=prog)=>TITLES[titleRank(p)];
+const aTitle=t=>(/^(<b>)?[AEIOU]/.test(t)?'an ':'a ')+t;   // "an Apprentice", "a Novice"
+const testOpen=T=>levelInfo(prog.xp).L>=T.level;
+// the next title to aim for, above the one held (a test can be passed before its level, so a pro can skip ahead)
+const nextTest=()=>TESTS.find(T=>T.rank>titleRank());
 const starsFor=acc=> acc>=97?3 : acc>=90?2 : acc>=PASS?1 : 0;
 const starStr=n=>'★'.repeat(n)+'☆'.repeat(3-n);
 const best=id=>(prog.lessons[id]&&prog.lessons[id].best)||0;
@@ -159,7 +194,10 @@ function addXP(n){
   const before=levelInfo(prog.xp).L;
   prog.xp+=n; day().xp+=n;
   const after=levelInfo(prog.xp);
-  if(after.L>before) toast(`⬆️ Level ${after.L}: ${after.title}!`);
+  if(after.L>before){
+    const T=TESTS.find(T=>T.level>before && T.level<=after.L && T.rank>titleRank());   // (not one passed early)
+    toast(T ? `⬆️ Level ${after.L}! 🎓 You can attempt ${T.title} now, from your profile card` : `⬆️ Level ${after.L}!`);
+  }
 }
 function updSkill(tag,acc){ const s=prog.skills[tag]||(prog.skills[tag]={m:0,n:0}); s.m = s.n ? Math.round(s.m*0.7+acc*0.3) : acc; s.n++; }
 function updateLesson(id,acc){
@@ -296,6 +334,14 @@ function setRange(a,b){
   layout();
 }
 function advanceGroups(){ while(gi<groups.length && groups[gi].notes.every(n=>n.hit||!n.req)) gi++; }
+/* Notes just after the current chord that belong to it: a hair later in the file, so in a group of their own,
+   but played together with it. They can be pressed with the chord instead of counting as wrong (and then
+   waiting for a key that's already down). */
+function chordFollowers(){
+  const g=groups[gi], out=[];
+  if(g) for(let j=gi+1; j<groups.length && groups[j].start-g.start<=CHORD_SLACK; j++) out.push(...groups[j].notes.filter(n=>n.req && !n.hit));
+  return out;
+}
 
 /* ---------- Layout & geometry ---------- */
 function layout(){
@@ -319,7 +365,21 @@ function keyAt(x,y){
 /* ---------- Audio ---------- */
 let ac=null;
 function audio(){ if(!ac) ac=new (window.AudioContext||window.webkitAudioContext)(); if(ac.state==='suspended') ac.resume(); return ac; }
-function tone(m,dur=0.6,vel=0.6){
+/* Realistic piano (fancy-piano.js, from MIDI-Creator): every key is calculated on this device the first time it's
+   switched on, which takes a few seconds; until then, and if it can't be made, the simple sound below plays instead. */
+let fancyOn=false;
+function setFancy(on){
+  fancyOn=on && !!self.FancyPiano;
+  const b=$('#fancy'); b.setAttribute('aria-pressed',fancyOn); b.hidden=!self.FancyPiano;
+  if(!fancyOn || FancyPiano.ready || FancyPiano.busy) return;
+  FancyPiano.prepare(audio(), f=>{ b.textContent='🎹 '+Math.round(f*100)+'%'; }).then(ok=>{
+    b.textContent='🎹';
+    if(!ok){ fancyOn=false; b.setAttribute('aria-pressed',false); toast('⚠ The realistic piano could not be prepared on this device'); }
+    else if(fancyOn) toast('🎹 Realistic piano is ready');
+  });
+}
+function tone(m,dur=0.6,vel=0.6,midiVel){   // vel 0..1 for the simple sound; midiVel (1-127) when the real one is known
+  if(fancyOn && FancyPiano.play(audio(), m, midiVel||Math.round(40+vel*100), dur)) return;
   const a=audio(), f=440*Math.pow(2,(m-69)/12), t0=a.currentTime, len=Math.max(0.25,dur);
   const g=a.createGain();
   g.gain.setValueAtTime(0,t0); g.gain.linearRampToValueAtTime(0.22*vel,t0+0.008);
@@ -339,10 +399,12 @@ function click(accent){
 
 /* ---------- Input handling ---------- */
 function score(n){ n.hit=true; stats.hit++; stats.streak++; }
+// one press plays every copy of that key written at the same moment (e.g. both hands' parts holding the same note)
+function scoreKey(n,pool){ score(n); for(const x of pool) if(x!==n && x.midi===n.midi && x.req && !x.hit && Math.abs(x.start-n.start)<0.02) score(x); }
 function noteOn(m, src, vel=90){
   if(src!=='midi') tone(m,0.8);
   held.set(m,null);
-  let ok=null;
+  let ok=null, late;
   if(playing && mode==='wait'){
     advanceGroups();
     const g=groups[gi];
@@ -354,15 +416,16 @@ function noteOn(m, src, vel=90){
           ok=true;
           // Chords: count only once all keys are down together
           if(together && need.length>1){ if(need.every(x=>held.has(x.midi))) need.forEach(score); }
-          else score(n);
+          else scoreKey(n, [...g.notes, ...chordFollowers()]);
         } else if(g.notes.some(n=>n.midi===m)) ok=true;
+        else if((late=chordFollowers().find(x=>x.midi===m))){ ok=true; scoreKey(late, chordFollowers()); }   // part of the chord, just written a hair later
         else { ok=false; g.wrong++; if((song.hidden||song.view==='staff') && g.wrong>=2) g.reveal=true; }
       } else ok=false;
     }
   } else if(playing && mode==='play'){
     let best=null, bd=WIN;
     for(const n of notes){ if(n.start>t+WIN) break; if(n.req && n.midi===m && !n.hit && !n.missed){ const d=Math.abs(n.start-t); if(d<=bd){ bd=d; best=n; } } }
-    if(best){ score(best); ok=true; } else ok=false;
+    if(best){ scoreKey(best, notes.slice(Math.max(0,si-64), si+64)); ok=true; } else ok=false;
   }
   if(ok===false){ stats.wrong++; stats.streak=0; heatMiss(t); }
   stats.bestStreak=Math.max(stats.bestStreak,stats.streak);
@@ -475,7 +538,7 @@ function startItem(it, listen=false){
   togglePlay();
 }
 function isCounting(){ const d=cur.def; return mode===d.mode && (hands==='both'||!d.both); }
-function runXP(acc,res){ let xp=Math.round(stats.hit*acc/100*0.5)+(acc>=PASS?5:0); if(res.firstPass) xp+=25; xp+=Math.max(0,res.newStars||0)*10; return Math.max(1,xp); }
+function runXP(acc,res){ let xp=Math.round(stats.hit*acc/100*0.5)+(acc>=PASS?5:0); if(res.firstPass) xp+=25; if(res.test&&res.test.passedNow) xp+=50; xp+=Math.max(0,res.newStars||0)*10; return Math.max(1,xp); }
 
 function recordRun(acc){
   if(!cur || mode==='listen' || stats.hit+stats.wrong+stats.miss===0) return null;
@@ -485,6 +548,17 @@ function recordRun(acc){
   if(cur.song && !partial && (hands==='both' || !d.both)){   // whole song, played with every hand it needs
     const r=prog.songs[cur.song.id]||(prog.songs[cur.song.id]={best:0, plays:0});
     res.prevBest=r.best; r.best=Math.max(r.best,acc); r.plays++; r.last=Date.now(); res.songBest=r.best;
+  }
+  if(cur.song && cur.song.test){   // a title test only counts when played by its rules
+    const T=cur.song.test;
+    const why = partial ? 'from the very start, without skipping'
+      : mode!=='play' ? 'in Play along' : Math.abs(speed-1)>1e-6 ? 'at full speed (100%)'
+      : d.both && hands!=='both' ? 'with both hands' : null;
+    res.test={T, why};   // (its level only decides when the profile card offers it: passing it earlier counts too)
+    if(!why){
+      const r=prog.tests[T.id]||(prog.tests[T.id]={best:0}); r.best=Math.max(r.best,acc);
+      if(acc>=TEST_PASS && !r.passed){ const before=titleRank(); r.passed=Date.now(); res.test.passedNow=true; res.test.newTitle=titleRank()>before; }
+    }
   }
   if(cur.kind==='drill'){ prog.counts.drills++; if(d.ear && acc>=PASS) prog.counts.ear++; }
   if(hands==='both') for(const s of d.skills||[]) updSkill(s, acc);
@@ -556,11 +630,23 @@ function freeFinish(acc,res){
     const play = cur&&cur.song ? [{label:'▶ Play it',primary:true,fn:()=>startItem(cur)}] : [];
     return setResult(song.title,null,'♪','Now try it yourself.',[...play, back]);
   }
+  if(res && res.test) return testFinish(acc,res,back);
   let detail=statLine();
   if(res && res.songBest!=null) detail+=` · personal best ${res.songBest}%`;
   else if(cur && cur.song) detail+=' · one-hand practice (play both hands to set a best score)';
   const title = res && res.songBest!=null && res.prevBest && acc>res.prevBest ? '🎉 New best · '+song.title : song.title;
   setResult(title, cur&&cur.song?starsFor(acc):null, acc+'%', detail, [{label:'Again',primary:true,fn:()=>{restart();togglePlay();}},{label:'⚡ Speed trainer',fn:()=>startTrainer(cur)},back], {xp:res&&res.xp});
+}
+function testFinish(acc,res,back){
+  const {T,why,passedNow,newTitle}=res.test, e=cur.song, again={label:'Again',primary:true,fn:()=>startSong(e,false)};
+  const practise={label:'🎻 Practise it',fn:()=>{ closeResult(); openScreen('songs'); showSong(songById(T.song)); }};
+  if(passedNow){ if(newTitle) toast(`🎓 You're now ${aTitle(T.title)}!`);
+    return setResult(newTitle?`🎓 You're now ${aTitle(T.title)}!`:`🎓 ${T.title} test passed`, starsFor(acc), acc+'%',
+      `${statLine()}. ${newTitle?`The title ${T.title} is yours to keep.`:`You already hold a higher title, so it stays.`}`, [back, {label:'Again',fn:again.fn}], {xp:res.xp}); }
+  if(why) return setResult(`${T.title} test · didn't count`, null, acc+'%', `A test only counts when it's played ${why}. Start it again from the Title tests list.`, [again, practise, back], {xp:res.xp});
+  const best=prog.tests[T.id].best;
+  if(testPassed(T)) return setResult(`${T.title} test`, starsFor(acc), acc+'%', `${statLine()} · best test score ${best}%. Already passed.`, [again, back], {xp:res.xp});
+  setResult(`${T.title} test · not yet`, starsFor(acc), acc+'%', `You need ${TEST_PASS}% to earn the title ${T.title}${best>acc?` (your best is ${best}%)`:''}. ${statLine()}.`, [again, practise, back], {xp:res.xp});
 }
 function lessonFinish(acc,res){
   const L=cur.lesson, pass=acc>=PASS, counts=res&&res.counts;
@@ -950,7 +1036,7 @@ function drawKeys(){   // the keyboard: what's held, what the app plays, and (un
   if(kbH<=0) return;
   const hidden=song&&song.hidden, reading=song&&song.view==='staff';
   const target=new Map(), sounding=new Map(), g=groups[gi];
-  if(mode==='wait' && g && g.start-t<=EARLY && (!(hidden||reading) || g.reveal)) g.notes.forEach(n=>{ if(n.req && !n.hit) target.set(n.midi,n); });
+  if(mode==='wait' && g && g.start-t<=EARLY && (!(hidden||reading) || g.reveal)) [...g.notes, ...(hidden||reading?[]:chordFollowers())].forEach(n=>{ if(n.req && !n.hit && !target.has(n.midi)) target.set(n.midi,n); });
   if(playing && !(hidden && mode==='listen')) for(let i=Math.max(0,si-64);i<si;i++){ const n=notes[i]; if(!n.req && n.start<=t && n.start+n.dur>t) sounding.set(n.midi,n); }
   const pulse = 0.55+0.45*Math.sin(performance.now()/180);
   const handCol=n=>n.hand==='L'?C.left:C.accent;
@@ -1144,7 +1230,7 @@ function updateTimeline(){
 function renderTimeline(){   // song length, saved-part ticks and the looped part
   tlShown=''; $('#tDur').textContent=fmtTime(rp?rp.r.dur:songEnd);
   const at=x=>(songEnd>0?Math.max(0,Math.min(100,100*x/songEnd)):0).toFixed(2)+'%';
-  $('#tlMarks').innerHTML=marksFor(markKey()).map((m,i)=>`<span class="tmark" data-i="${i}" style="left:${at(m.t)}" title="${esc(m.label)} · ${fmtTime(m.t)}"></span>`).join('');
+  $('#tlMarks').innerHTML=marksFor(markKey()).map((m,i)=>`<span class="tmark" data-i="${i}" style="left:${at(m.t)}${m.c?';--mc:'+m.c:''}" title="${esc(m.label)} · ${fmtTime(m.t)}"></span>`).join('');
   $('#tlMarks').querySelectorAll('.tmark').forEach(el=>el.onpointerdown=e=>{ e.stopPropagation(); jumpToMark(+el.dataset.i); });
   $('#tlTrack').style.background=heatGradient(markKey());
   const lp=$('#tlLoop'); lp.hidden=!loop;
@@ -1165,8 +1251,9 @@ $('#metro').onclick=e=>{ metroOn=!metroOn; if(!(song&&song.metro)) metroPref=met
 $('#sound').onclick=e=>{ soundOn=!soundOn; e.currentTarget.setAttribute('aria-pressed',soundOn); audio(); };
 const LABEL_SIZES=[[0,'Aa off'],[1,'Aa S'],[1.4,'Aa M'],[1.8,'Aa L'],[2.4,'Aa XL']];
 $('#labels').innerHTML=LABEL_SIZES.map(([v,l])=>`<option value="${v}">${l}</option>`).join('');
-function applyLabels(){ labelScale=prog.settings.labels!=null?prog.settings.labels:1; $('#labels').value=String(labelScale); }   // saved per player
+function applyLabels(){ labelScale=prog.settings.labels!=null?prog.settings.labels:1; $('#labels').value=String(labelScale); setFancy(!!prog.settings.fancy); }   // saved per player (with the realistic piano)
 $('#labels').onchange=e=>{ prog.settings.labels=labelScale=+e.target.value; saveProg(); };
+$('#fancy').onclick=()=>{ prog.settings.fancy=!fancyOn; saveProg(); setFancy(prog.settings.fancy); };
 $('#midi').onclick=connectMidi;
 $('#homeBtn').onclick=()=>{ if(session) sessionSummary(); else openScreen('home'); };
 $('#resCard').onclick=()=>clearCountdown();
@@ -1204,9 +1291,21 @@ function goalRing(size=64){
   const g=prog.settings.goal, m=day().sec/60, f=Math.min(1,m/g), r=size/2-5, c=2*Math.PI*r;
   return `<div class="ring" style="width:${size}px;height:${size}px"><svg width="${size}" height="${size}"><circle cx="${size/2}" cy="${size/2}" r="${r}" fill="none" stroke="${'#20263f'}" stroke-width="6"/><circle cx="${size/2}" cy="${size/2}" r="${r}" fill="none" stroke="${f>=1?C.good:C.accent}" stroke-width="6" stroke-linecap="round" stroke-dasharray="${c*f} ${c}" transform="rotate(-90 ${size/2} ${size/2})"/></svg><span>${Math.floor(m)}/${g}<small>min</small></span></div>`;
 }
+// the next title test, straight from the profile card (Home and Progress)
+async function attemptTest(T){
+  if(!T) return;
+  try{ await loadLibrary(); const e=testEntries().find(x=>x.test===T); await songDef(e);
+    toast(`🎓 ${T.title} test: the whole song, both hands, Play along at full speed. ${TEST_PASS}% to pass.`);
+    startSong(e,false);
+  }catch(err){ toast('⚠ '+(err.message||err)); }
+}
+B.addEventListener('click',ev=>{ if(ev.target.closest('#attempt')) attemptTest(nextTest()); });
 function heroHTML(){
   const li=levelInfo(prog.xp);
-  return `<div class="hero"><span class="avatar">${me().emoji}</span><div class="lv"><b>${esc(me().name)}</b> · Level ${li.L} · ${li.title}<div class="xpbar"><i style="width:${100*li.cur/li.need}%"></i></div><small class="muted">${li.cur} / ${li.need} XP to level ${li.L+1}</small></div>
+  const T=nextTest();
+  return `<div class="hero"><span class="avatar">${me().emoji}</span><div class="lv"><b>${esc(me().name)}</b> · Level ${li.L} · ${titleOf()}<div class="xpbar"><i style="width:${100*li.cur/li.need}%"></i></div><small class="muted">${li.cur} / ${li.need} XP to level ${li.L+1}</small>
+    ${!T?'':testOpen(T)?`<button class="primary nexttest" id="attempt" title="${esc(`${T.title} test: the whole song, both hands, Play along at full speed. ${TEST_PASS}% to pass.`)}">🎓 Attempt ${T.title}</button>`
+       :`<small class="muted nexttest">🎓 Attempt ${T.title} at level ${T.level}</small>`}</div>
     <div class="pill"><b>🔥 ${streak()}</b><small>day streak</small></div><div class="pill"><b>${nPassed()}</b><small>of ${ALL_LESSONS.length} lessons</small></div>${goalRing()}</div>`;
 }
 
@@ -1274,7 +1373,13 @@ function loadLibrary(){   // songs.js is only fetched when needed (or once the a
     document.head.appendChild(el);
   }));
 }
-const songById=id=>id.startsWith('my:') ? myEntries().find(s=>s.id===id) : self.SONGS.find(s=>s.id===id);
+const songById=id=>id.startsWith('my:') ? myEntries().find(s=>s.id===id) : id.startsWith('test:') ? testEntries().find(s=>s.id===id) : self.SONGS.find(s=>s.id===id);
+// the title tests as songs of their own (a copy of the library entry, so scores, saved parts and mode stay separate)
+let testSongs=null;
+function testEntries(){
+  if(!self.SONGS) return [];
+  return testSongs || (testSongs=TESTS.map(T=>{ const src=SONGS.find(s=>s.id===T.song); if(!src) return null; const {def,...e}=src; return Object.assign(e,{id:T.id, cat:'tests', test:T}); }).filter(Boolean));
+}
 async function songDef(e){   // notes are parsed (or the MIDI file fetched) the first time a song is opened
   if(e.def) return e.def;
   let d;
@@ -1293,7 +1398,12 @@ async function songDef(e){   // notes are parsed (or the MIDI file fetched) the 
   return e.def=prep(d);
 }
 const songItem=e=>({kind:'free', song:e, def:e.def, title:e.title, sub:'🎵 Song'});
-function startSong(e,listen){ session=null; trainer=null; e.def.mode=prog.settings.songMode||'wait'; startItem(songItem(e),listen); }
+function startSong(e,listen){
+  session=null; trainer=null;
+  if(e.test){ e.def.mode='play'; setSpeed(1); setHands('both'); }   // a title test: Play along, full speed, both hands
+  else e.def.mode=prog.settings.songMode||'wait';
+  startItem(songItem(e),listen);
+}
 
 let localWait=null, localGaveUp=false;
 function renderSongs(){
@@ -1309,11 +1419,11 @@ function renderSongs(){
   }
   const mine=mySongs||[];
   const songCourse=LESSON.p1.course;
-  if(songCat==='mine' && !mine.length) songCat='';
+  if((songCat==='mine' && !mine.length) || songCat==='tests') songCat='';   // (Title tests have no filter: they're always at the bottom)
   B.innerHTML=`${!mySongs && (dbWaiting || localGaveUp) ? '<p class="notice">⚠ My songs and recordings can\'t open yet. This usually means Keys is also open in another tab or as the installed app, with an older version. Close that and they\'ll appear here.</p>' : ''}
   <input id="sq" class="search" type="search" placeholder="Search ${SONGS.length+mine.length} songs, composers or saved parts" value="${esc(songQ)}" autocomplete="off">
   <div class="chips" id="slv">${[0,1,2,3].map(k=>`<button data-l="${k}" class="${k===songLvl?'on':''}">${k?dots(k)+' '+LEVELS[k]:'All levels'}</button>`).join('')}</div>
-  <div class="chips" id="sct"><button data-c="" class="${songCat?'':'on'}">All</button>${Object.entries(songCats()).map(([k,l])=>`<button data-c="${k}" class="${k===songCat?'on':''}">${l}</button>`).join('')}</div>
+  <div class="chips" id="sct"><button data-c="" class="${songCat?'':'on'}">All</button>${Object.entries(songCats()).filter(([k])=>k!=='tests').map(([k,l])=>`<button data-c="${k}" class="${k===songCat?'on':''}">${l}</button>`).join('')}</div>
   ${savedPartsHTML()}
   ${recordingsHTML()}
   <div id="slist"></div>
@@ -1327,8 +1437,9 @@ function renderSongs(){
   </div>`;
   renderSongList();
   $('#sq').oninput=e=>{ songQ=e.target.value; renderSongList(); };
-  bind('#slv button',el=>{ songLvl=+el.dataset.l; renderSongs(); });
-  bind('#sct button',el=>{ songCat=el.dataset.c; renderSongs(); });
+  // tapping the filter that's already on goes back to All
+  bind('#slv button',el=>{ songLvl = +el.dataset.l===songLvl ? 0 : +el.dataset.l; renderSongs(); });
+  bind('#sct button',el=>{ songCat = el.dataset.c===songCat ? '' : el.dataset.c; renderSongs(); });
   bind('.sl',el=>showIntro(LESSON[el.dataset.id]));
   bind('#openMid',()=>$('#file').click());
   bind('.pp',el=>startItem(genPop(el.dataset.p)));
@@ -1336,12 +1447,13 @@ function renderSongs(){
   bindRecordings();
 }
 function savedPartsHTML(){   // every saved part of this player, in songs and lessons
-  const all=Object.keys(prog.marks).flatMap(k=>{ const title=markTitle(k); return title ? prog.marks[k].map((m,i)=>({k,i,m,title})) : []; });
-  return all.length ? `<h2 class="sec">🔖 Your saved parts</h2><div class="marks">${all.map(x=>`<button class="mk" data-k="${esc(x.k)}" data-i="${x.i}">▶ ${esc(x.title)} · <b>${esc(x.m.label)}</b> <small class="muted">${fmtTime(x.m.t)}</small></button>`).join('')}</div>` : '';
+  const keys=new Set([...Object.keys(prog.marks), ...myEntries().filter(e=>e.mine.marks&&e.mine.marks.length).map(e=>e.id)]);
+  const all=[...keys].flatMap(k=>{ const title=markTitle(k); return title ? marksFor(k).map((m,i)=>({k,i,m,title})) : []; });
+  return all.length ? `<h2 class="sec">🔖 Your saved parts</h2><div class="marks">${all.map(x=>`<button class="mk" data-k="${esc(x.k)}" data-i="${x.i}">${markDot(x.m)}▶ ${esc(x.title)} · <b>${esc(x.m.label)}</b> <small class="muted">${fmtTime(x.m.t)}</small></button>`).join('')}</div>` : '';
 }
 let songBase=[];
 function renderSongList(){
-  songBase=[...myEntries(), ...SONGS].filter(s=>(!songLvl||s.level===songLvl) && (!songCat||s.cat===songCat) && matches(songHay(s),songQ));
+  songBase=[...myEntries(), ...SONGS, ...testEntries()].filter(s=>(!songLvl||s.level===songLvl) && (!songCat||s.cat===songCat) && matches(songHay(s),songQ));
   const cats=Object.entries(songCats()).filter(([c])=>songBase.some(s=>s.cat===c));
   $('#slist').innerHTML = !songBase.length ? '<p class="muted">No songs match your search.</p>' :
     cats.map(([c,label])=>`<div class="sechead"><h2 class="sec">${label} <span class="muted" id="sn-${c}"></span></h2>`+
@@ -1351,7 +1463,10 @@ function renderSongList(){
 }
 function fillCat(c){   // one category section, filtered by its own search box
   const all=songBase.filter(s=>s.cat===c), ss=all.filter(s=>matches(songHay(s),catQ[c]||''));
-  const row=s=>{ const r=prog.songs[s.id];
+  const row=s=>{ const r=prog.songs[s.id], T=s.test;
+    if(T){ const ok=testPassed(T), open=testOpen(T), tb=(prog.tests[T.id]||{}).best;
+      return `<button class="song test${ok?' done':''}" data-id="${s.id}"><span class="t"><b>${ok?'✓':'🎓'} ${T.title} · ${esc(s.title)}</b><small>${esc(s.by)}</small></span>
+        ${tb?`<span class="s" title="Your best test score"><small>${tb}%</small></span>`:''}${s.level?`<span class="lvl" title="${LEVELS[s.level]}">${dots(s.level)}</span>`:''}</button>`; }
     return `<button class="song" data-id="${s.id}"><span class="t"><b>${esc(s.title)}</b><small>${esc(s.by)}</small></span>
       ${r&&r.best?`<span class="s" title="Your best">${starStr(starsFor(r.best))}<small>${r.best}%</small></span>`:''}${s.level?`<span class="lvl" title="${LEVELS[s.level]}">${dots(s.level)}</span>`:''}</button>`; };
   $('#sn-'+c).textContent = ss.length<all.length ? `· ${ss.length} of ${all.length}` : `· ${all.length}`;
@@ -1362,22 +1477,26 @@ function fillCat(c){   // one category section, filtered by its own search box
 async function showSong(e){
   let d; try{ d=await songDef(e); }catch(err){ return toast('⚠ '+err.message); }
   const r=prog.songs[e.id], len=d.notes.reduce((m,n)=>Math.max(m,n.start+n.dur),0), card=$('#introCard');
-  const M=e.mine;
-  card.innerHTML=`<div class="kicker">${songCats()[e.cat]}${e.level?` · ${dots(e.level)} ${LEVELS[e.level]}`:''}</div>
+  const M=e.mine, T=e.test, tr=T&&prog.tests[T.id];
+  card.innerHTML=`<div class="kicker">${T?`🎓 Title test · ${T.title}`:songCats()[e.cat]}${e.level?` · ${dots(e.level)} ${LEVELS[e.level]}`:''}</div>
     ${M?`<input id="sgTitle" class="search title" maxlength="80" value="${esc(e.title)}" aria-label="Song title">`:`<h2>${esc(e.title)}</h2>`}<p class="muted">${esc(e.by)}</p>
-    <div class="meta">${fmtTime(len)} at full speed · ${d.both?'both hands':'one hand'}${r?` · best ${r.best}% · played ${r.plays}×`:''}</div>
-    ${d.both?`<div class="seg" id="sgHands"><button data-h="right">Right hand</button><button data-h="left">Left hand</button><button data-h="both">Both hands</button></div><br>`:''}
-    <div class="seg" id="sgMode"><button data-m="wait">⏸ Wait for me</button><button data-m="play">⏱ Play along</button></div>
-    ${marksFor(e.id).length?`<div class="meta">🔖 Saved parts:</div><div class="marks">${marksFor(e.id).map((m,i)=>`<button class="mk" data-i="${i}">▶ <b>${esc(m.label)}</b> <small class="muted">${fmtTime(m.t)}</small></button>`).join('')}</div>`:''}
+    <div class="meta">${fmtTime(len)} at full speed · ${d.both?'both hands':'one hand'}${r?` · played ${r.plays}×`:''}${T?(tr&&tr.best?` · best test score ${tr.best}%`:''):r?` · best ${r.best}%`:''}</div>
+    ${T?`<p class="testrules">${testPassed(T)?`✓ Passed: you're ${aTitle(`<b>${T.title}</b>`)}. You can still play it to beat your score.`
+        :`Earn the title <b>${T.title}</b>: play the whole song with both hands in <b>Play along</b> at full speed and score <b>${TEST_PASS}%</b> or more.`}
+        ${testPassed(T)?'':` Practise it first in ${songCats()[songById(T.song).cat]}, where you can slow it down, take one hand at a time or use Wait for me.`}</p>`
+    :`${d.both?`<div class="seg" id="sgHands"><button data-h="right">Right hand</button><button data-h="left">Left hand</button><button data-h="both">Both hands</button></div><br>`:''}
+    <div class="seg" id="sgMode"><button data-m="wait">⏸ Wait for me</button><button data-m="play">⏱ Play along</button></div>`}
+    ${marksFor(e.id).length?`<div class="meta">🔖 Saved parts:</div><div class="marks">${marksFor(e.id).map((m,i)=>`<button class="mk" data-i="${i}">${markDot(m)}▶ <b>${esc(m.label)}</b> <small class="muted">${fmtTime(m.t)}</small></button>`).join('')}</div>`:''}
     ${heatHTML(e.id)}
     ${M&&M.tracks.length>1?`<div class="meta">Instruments to play:</div><div class="tracks">${M.tracks.map(t=>`<label><input type="checkbox" data-t="${t.index}"${M.on.includes(t.index)?' checked':''}> ${esc(t.name)} <small>(${t.count})</small></label>`).join('')}</div>`:''}
-    <div class="btns"><button class="primary" id="sgStart">▶ Start</button><button id="sgListen">👂 Listen</button><button id="sgTrain">⚡ Speed trainer</button><button id="sgBack">Back</button>${M?'<button id="sgDel" class="danger">Remove</button>':''}</div>`;
+    <div class="btns"><button class="primary" id="sgStart">▶ ${T?'Take the test':'Start'}</button><button id="sgListen">👂 Listen</button>${T?`<button id="sgPractise">🎻 Practise it</button>`:'<button id="sgTrain">⚡ Speed trainer</button>'}<button id="sgBack">Back</button>${M?'<button id="sgDel" class="danger">Remove</button>':''}</div>`;
   const seg=(id,key,get,set)=>{ const el=$(id); if(!el) return; const sync=()=>el.querySelectorAll('button').forEach(b=>b.classList.toggle('on',b.dataset[key]===get())); el.querySelectorAll('button').forEach(b=>b.onclick=()=>{ set(b.dataset[key]); sync(); }); sync(); };
   seg('#sgHands','h',()=>hands,setHands);
   seg('#sgMode','m',()=>prog.settings.songMode||'wait',m=>{ prog.settings.songMode=m; saveProg(); });
   $('#sgStart').onclick=()=>startSong(e,false);
   $('#sgListen').onclick=()=>startSong(e,true);
-  $('#sgTrain').onclick=()=>startTrainer(songItem(e));
+  if(T) $('#sgPractise').onclick=()=>showSong(songById(T.song));   // the same piece in its normal category
+  else $('#sgTrain').onclick=()=>startTrainer(songItem(e));
   $('#sgBack').onclick=()=>{ $('#intro').hidden=true; };
   card.querySelectorAll('.mk').forEach(b=>b.onclick=()=>startAtMark(e.id,+b.dataset.i));
   bindHeat(card,e.id);
@@ -1421,7 +1540,7 @@ async function loadMySongs(){
 }
 const saveMySong=r=>dbDo(true,st=>st.put(r)).catch(()=>toast('⚠ Could not save on this device'));
 const deleteMySong=id=>dbDo(true,st=>st.delete(id));
-const songCats=()=>Object.assign(mySongs&&mySongs.length?{mine:'📁 My songs'}:{}, self.SONG_CATS);
+const songCats=()=>Object.assign(mySongs&&mySongs.length?{mine:'📁 My songs'}:{}, self.SONG_CATS, {tests:'🎓 Title tests'});
 function myEntries(){
   return (mySongs||[]).map(r=>myMap.get(r.id) || myMap.set(r.id,{id:'my:'+r.id, title:r.title, by:r.by||r.file, cat:'mine', level:0, mine:r}).get(r.id));
 }
@@ -1438,18 +1557,24 @@ const meterOf=(ts,q)=> !ts ? {meter:4, beat:q} : ts.d===8 && ts.n%3===0 ? {meter
 
 const hashBytes=u8=>{ let h=0x811c9dc5; for(let i=0;i<u8.length;i++){ h^=u8[i]; h=Math.imul(h,16777619); } return (h>>>0).toString(16)+'-'+u8.length; };
 let afterWho=null;   // something to show once a player has been picked
-async function importFiles(files){
+async function importFiles(files, bm){   // bm: bookmarks sent with a link, used when the file has none of its own
   await loadMySongs();
   if(!mySongs) return alert('My songs can\'t be opened right now because another Keys window is still open with an older version. Close the other Keys tabs (or the installed app) and try again.');
   const added=[]; let dups=0;
   for(const f of files){
     try{
       const buf=await f.arrayBuffer(), b=new Uint8Array(buf,0,4), sig=String.fromCharCode(...b), hash=hashBytes(new Uint8Array(buf));
-      const dup=mySongs.find(r=>r.hash===hash); if(dup){ added.push(dup); dups++; continue; }   // same file again: open the copy we have
-      const p = sig==='MThd' ? parseMidiFile(buf) : parseMusicXML(sig==='PK\x03\x04' ? await unzipMusicXML(buf) : new TextDecoder().decode(buf));
+      const p0=()=> sig==='MThd' ? parseMidiFile(buf) : null;
+      const marksOf=p=> p && p.marks.length ? p.marks : cleanMarks(bm, p?p.lead:0);
+      const dup=mySongs.find(r=>r.hash===hash);
+      if(dup){   // same file again: open the copy we have (added before bookmarks existed? pick them up now)
+        if(!dup.marks || (!dup.marks.length && bm && bm.length)){ dup.marks=marksOf(p0()); saveMySong(dup); }
+        added.push(dup); dups++; continue;
+      }
+      const p = p0() || parseMusicXML(sig==='PK\x03\x04' ? await unzipMusicXML(buf) : new TextDecoder().decode(buf));
       if(!p.notes.length) throw new Error('no notes found');
       const r={id:Date.now().toString(36)+Math.random().toString(36).slice(2,6), title:p.title||f.name.replace(/\.[^.]+$/,''), by:p.by||'', file:f.name, added:Date.now(), hash,
-               tracks:p.tracks, on:p.tracks.map(t=>t.index), notes:p.notes, ...meterOf(p.ts,p.beat)};
+               tracks:p.tracks, on:p.tracks.map(t=>t.index), notes:p.notes, marks:marksOf(p.marks?p:null), ...meterOf(p.ts,p.beat)};
       await dbDo(true,st=>st.put(r)); mySongs.push(r); added.push(r);
     }catch(err){ alert(`Could not add ${f.name}: ${err.message}`); }
   }
@@ -1462,17 +1587,19 @@ async function importFiles(files){
 /* Songs sent by link, e.g. from a MIDI converter:
      Keys/#midi=<the .mid file in base64 or base64url>&title=Song name
      Keys/#midi=https://example.com/song.mid   (the host must allow cross-origin downloads)
+     &bm=[{"t":12.5,"n":"Chorus","c":"#60a5fa"},…]   bookmarks (seconds from the start of the file), used if the file has no markers
    Data after # never leaves the browser, so no server is needed. ?midi=… works too, for short values. */
 async function importFromLink(){
   const h=new URLSearchParams(location.hash.slice(1)), q=new URLSearchParams(location.search), v=h.get('midi')||q.get('midi');
   if(!v) return;
   const title=(h.get('title')||q.get('title')||'Linked song').trim();
+  let bm=[]; try{ bm=JSON.parse(h.get('bm')||q.get('bm')||'[]').map(b=>({t:b.t, label:b.n, c:b.c})); }catch(e){}
   history.replaceState(null,'',location.pathname);   // so a reload doesn't import it again
   try{
     let bytes;
     if(/^https?:\/\//i.test(v)){ const r=await fetch(v); if(!r.ok) throw new Error('download failed ('+r.status+')'); bytes=await r.arrayBuffer(); }
     else{ const b=atob(v.replace(/ /g,'+').replace(/-/g,'+').replace(/_/g,'/')); bytes=Uint8Array.from(b,c=>c.charCodeAt(0)); }
-    await importFiles([new File([bytes], title.replace(/[\\/:*?"<>|]+/g,'_')+'.mid')]);
+    await importFiles([new File([bytes], title.replace(/[\\/:*?"<>|]+/g,'_')+'.mid')], bm);
   }catch(err){ alert('Could not open the linked song: '+(err.message||err)); }
 }
 
@@ -1788,7 +1915,7 @@ function pathAt(path,w){   // song time at replay time w
 }
 function replayTick(silent){
   const r=rp.r, w=rp.w;
-  if(rp.playing && !silent) while(rp.i<r.notes.length && r.notes[rp.i][0]<=w){ const n=r.notes[rp.i++]; tone(n[2], Math.max(0.08,n[1]-n[0]), 0.25+0.45*n[3]/127); }
+  if(rp.playing && !silent) while(rp.i<r.notes.length && r.notes[rp.i][0]<=w){ const n=r.notes[rp.i++]; tone(n[2], Math.max(0.08,n[1]-n[0]), 0.25+0.45*n[3]/127, n[3]); }
   held.clear(); for(const n of r.notes){ if(n[0]>w) break; if(n[1]>w) held.set(n[2], n[4]); }
   if(r.path){ const nt=pathAt(r.path,w); if(nt!==t){ t=nt; si=notes.findIndex(n=>n.start>t); if(si<0) si=notes.length; } }
   if(rp.playing && w>=r.dur){
@@ -1901,7 +2028,11 @@ async function practiseSpot(k,i){   // open the song or lesson and loop the part
    Saved parts: labelled spots in a song or lesson, per player
    ===================================================================== */
 function markKey(c=cur){ return c ? (c.song ? c.song.id : c.lesson ? 'lesson:'+c.lesson.id : null) : null; }   // drills are new every time
-function marksFor(k){ return (k && prog.marks[k]) || []; }
+/* An imported song's own bookmarks (from MIDI-Creator or the file's markers) are every player's starting parts;
+   the first change gives this player their own copy in prog.marks. */
+function fileMarks(k){ const e=k && k.startsWith('my:') && myMap.get(k.slice(3)); return (e && e.mine.marks) || []; }
+function marksFor(k){ return !k ? [] : prog.marks[k] || fileMarks(k); }
+function ownMarks(k){ return prog.marks[k] || (prog.marks[k]=fileMarks(k).map(m=>({...m}))); }
 function markTitle(k){ if(k.startsWith('lesson:')){ const l=LESSON[k.slice(7)]; return l&&l.title; } const e=self.SONGS&&songById(k); return e&&e.title; }
 function jumpToMark(i){ const m=marksFor(markKey())[i]; if(!m) return; if(loop && loop.a!==m.t){ loop=null; renderTimeline(); } seekAnimated(Math.max(-LEAD, m.t-LEADIN)); }
 function loopMark(i){
@@ -1911,6 +2042,7 @@ function loopMark(i){
   renderTimeline(); seekAnimated(loopStart()); scrub.resume=true; updateUI();
 }
 function saveMarks(){ saveProg(); renderTimeline(); }
+const markDot=m=> m.c ? `<span class="mdot" style="--mc:${m.c}"></span>` : '';   // the bookmark's color from MIDI-Creator
 async function startAtMark(k,i){   // from a menu: open the song or lesson and start just before the part
   const m=marksFor(k)[i]; if(!m) return;
   let it;
@@ -1935,7 +2067,7 @@ function renderMarks(){
                     : '<p class="muted">Saved parts work in songs and lessons. Open one, find the spot on the timeline, then save it here.</p>';
   else body=(L.length ? L.map((m,i)=> i===markEdit
       ? `<div class="mrow"><input id="mRename" maxlength="40" value="${esc(m.label)}"><button class="primary" data-a="ren" data-i="${i}">Save</button></div>`
-      : `<div class="mrow"><button class="mgo ic" data-a="go" data-i="${i}">${ICON.play}<b>${esc(m.label)}</b><small>${fmtTime(m.t)}</small></button>`+
+      : `<div class="mrow"><button class="mgo ic" data-a="go" data-i="${i}">${markDot(m)}${ICON.play}<b>${esc(m.label)}</b><small>${fmtTime(m.t)}</small></button>`+
         `<button data-a="loop" data-i="${i}" title="Loop this part (until the next saved part)" class="ic${loop&&loop.a===m.t?' on':''}">${ICON.loop}</button>`+
         `<button data-a="edit" data-i="${i}" class="ic" title="Rename" aria-label="Rename">${ICON.edit}</button><button data-a="del" data-i="${i}" class="ic" title="Delete" aria-label="Delete">${ICON.del}</button></div>`).join('')
       : '<p class="muted">No saved parts yet. Move to a spot (drag the timeline or pause) and save it.</p>')+
@@ -1946,16 +2078,16 @@ function renderMarks(){
   const add=MM.querySelector('#mLabel'); if(add) add.onkeydown=e=>{ if(e.key==='Enter') markAction('add'); };
 }
 function markAction(a,i){
-  const k=markKey(), L=marksFor(k);
+  const k=markKey(), L=['ren','del'].includes(a) ? ownMarks(k) : marksFor(k);
   if(a==='close') return closeMarks();
   if(a==='go'){ closeMarks(); return jumpToMark(i); }
   if(a==='loop'){ closeMarks(); return loopMark(i); }
   if(a==='edit'){ markEdit=i; return renderMarks(); }
   if(a==='ren'){ const v=MM.querySelector('#mRename').value.trim(); if(v){ L[i].label=v; if(loop&&loop.a===L[i].t) loop.label=v; saveMarks(); updateUI(); } markEdit=-1; return renderMarks(); }
-  if(a==='del'){ if(loop&&loop.a===L[i].t) loop=null; L.splice(i,1); if(!L.length) delete prog.marks[k]; saveMarks(); updateUI(); return renderMarks(); }
+  if(a==='del'){ if(loop&&loop.a===L[i].t) loop=null; L.splice(i,1); if(!L.length && !fileMarks(k).length) delete prog.marks[k]; saveMarks(); updateUI(); return renderMarks(); }   // kept empty if the song has its own bookmarks, or they'd come back
   if(a==='add' && k){
     const label=MM.querySelector('#mLabel').value.trim()||`Part ${L.length+1}`, at=+Math.max(0,scrub?scrub.target:t).toFixed(2);
-    const list=prog.marks[k]||(prog.marks[k]=[]), same=list.find(m=>Math.abs(m.t-at)<0.05);
+    const list=ownMarks(k), same=list.find(m=>Math.abs(m.t-at)<0.05);
     if(same) same.label=label; else{ list.push({t:at, label}); list.sort((x,y)=>x.t-y.t); }   // same spot: just rename it
     saveMarks();
     toast(`🔖 Saved “${label}” at ${fmtTime(at)}`); closeMarks();
