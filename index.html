@@ -81,6 +81,23 @@ canvas{position:absolute;inset:0;width:100%;height:100%;display:block;touch-acti
 .hs{border-color:var(--bad)}
 .small{font-size:12px}
 
+/* Help */
+#help{position:fixed;z-index:11}
+.helpcard{max-width:680px}
+.helpcard h3{font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:16px 0 6px}
+.hrow{display:flex;gap:12px;align-items:flex-start;padding:7px 0;border-bottom:1px solid var(--line)}
+.hrow.off{opacity:.7}
+.hicon{flex:none;min-width:58px;display:flex;justify-content:center}
+.hicon span{display:inline-flex;align-items:center;justify-content:center;gap:4px;min-width:34px;height:30px;padding:0 8px;border:1px solid var(--line);border-radius:8px;background:var(--panel2);font-size:13px;white-space:nowrap}
+.hicon svg{width:16px;height:16px}
+.hrow .hname{display:block;font-weight:700}
+.hrow small{color:var(--muted);display:block;margin-top:2px}
+.hrow i.when{display:block;color:var(--left);font-style:normal;font-size:12px;margin-top:3px}
+.keys-list{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;font-size:14px}
+.keys-list kbd{background:var(--panel2);border:1px solid var(--line);border-radius:5px;padding:1px 6px;font:inherit;font-size:12px;white-space:nowrap}
+.legend{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:14px}
+.legend span::before{content:"";display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:6px;vertical-align:-1px;background:var(--c)}
+
 /* Recording */
 .rec svg{color:var(--bad)}
 .rec.on{border-color:var(--bad);color:var(--bad);font-variant-numeric:tabular-nums}
@@ -291,6 +308,7 @@ h2.sec{font-size:13px;text-transform:uppercase;letter-spacing:.07em;color:var(--
       <button id="fancy" aria-pressed="false" title="Realistic piano sound (from MIDI-Creator)">🎹</button>
       <select id="labels" aria-label="Size of note names and finger numbers" title="Size of note names and finger numbers"></select>
       <button id="fs" title="Fullscreen">⛶</button>
+      <button id="helpBtn" class="ic" title="Help: what every button does" aria-label="Help"></button>
       <button id="midi" class="chip">Connect piano</button>
     </div>
   </header>
@@ -326,6 +344,7 @@ h2.sec{font-size:13px;text-transform:uppercase;letter-spacing:.07em;color:var(--
 
 <div id="screen" hidden><nav class="snav" id="snav"></nav><div id="sbody"></div></div>
 <div id="intro" class="overlay" hidden><div class="card intro" id="introCard"></div></div>
+<div id="help" class="overlay" hidden><div class="card intro helpcard" id="helpCard"></div></div>
 <div id="who" class="overlay" hidden><div class="card whocard" id="whoCard"></div></div>
 <div id="marksMenu" class="pop" hidden></div>
 <div id="toasts"></div>

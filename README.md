@@ -110,6 +110,8 @@ Connect the piano with a USB-OTG cable and allow MIDI access.
   with dots, flags and beams, chords on one stem, accidentals per bar with naturals, and rests. Notes are spaced by
   time, with more room for fast passages. Letter names follow the Aa setting and finger numbers are shown. The
   keyboard below can be hidden. Simplifications: one voice per hand, and no ties across bar lines.
+- **❓ Help:** the ? button at the end of the top bar explains every button (with its icon), the colours and the
+  computer-keyboard shortcuts. Buttons that only appear in some situations say when.
 - **Keyboard view:** hands (practise one hand while the app plays the other), speed, 🥁 metronome
   (accent on beat 1, count-in), sound, note names/fingers with adjustable size (Aa off/S/M/L/XL, saved per player), fullscreen.
 - **🎹 Realistic piano:** the button next to 🔊 switches every sound in Keys (your key presses, the song, Listen and

@@ -471,9 +471,9 @@ cv.addEventListener('pointerup',release); cv.addEventListener('pointercancel',re
 // Computer keyboard: A W S E D F T G Y H U J K = C4..C5, Space = start/pause, Esc = close
 const KEYMAP='awsedftgyhujk';
 const downKeys=new Set();
-const overlayOpen=()=>!$('#screen').hidden || !$('#intro').hidden || !$('#who').hidden || !$('#marksMenu').hidden;
+const overlayOpen=()=>!$('#screen').hidden || !$('#intro').hidden || !$('#who').hidden || !$('#marksMenu').hidden || !$('#help').hidden;
 addEventListener('keydown',e=>{
-  if(e.key==='Escape'){ if(!$('#marksMenu').hidden) closeMarks(); else if(!$('#who').hidden){ if(!whoForced) closeWho(); } else if(!$('#intro').hidden) $('#intro').hidden=true; else if(!$('#screen').hidden) closeScreen(); return; }
+  if(e.key==='Escape'){ if(!$('#help').hidden) closeHelp(); else if(!$('#marksMenu').hidden) closeMarks(); else if(!$('#who').hidden){ if(!whoForced) closeWho(); } else if(!$('#intro').hidden) $('#intro').hidden=true; else if(!$('#screen').hidden) closeScreen(); return; }
   if(e.target.tagName==='SELECT' || e.target.tagName==='INPUT' || overlayOpen()) return;
   if(e.code==='Space'){ e.preventDefault(); togglePlay(); return; }
   if(e.key==='ArrowLeft' || e.key==='ArrowRight'){ e.preventDefault(); seekAnimated(pos()+(e.key==='ArrowLeft'?-5:5)); return; }
@@ -1345,12 +1345,14 @@ const ICON={
   sheet: svg('<path d="M2 7h20M2 11h20M2 15h20"/><ellipse cx="9" cy="17" rx="2.6" ry="2" fill="currentColor" stroke="none"/><path d="M11.4 17V4"/>'),
   falling: svg('<rect x="4" y="2" width="4" height="9" rx="1.5" fill="currentColor" stroke="none"/><rect x="14" y="6" width="4" height="7" rx="1.5" fill="currentColor" stroke="none"/><path d="M2 21h20M2 16.5h20"/>'),
   keys:  svg('<rect x="2" y="5" width="20" height="14" rx="2"/><path d="M7 5v8M12 5v8M17 5v8M5.5 13h3M10.5 13h3M15.5 13h3"/>'),
+  help:  svg('<circle cx="12" cy="12" r="9.5"/><path d="M9.3 9.2a2.8 2.8 0 0 1 5.4 1c0 1.9-2.7 2.3-2.7 4"/><circle cx="12" cy="17.6" r=".6" fill="currentColor"/>'),
   rec:   svg('<circle cx="12" cy="12" r="6.5" fill="currentColor" stroke="none"/>'),
   stop:  svg('<rect x="6.5" y="6.5" width="11" height="11" rx="2" fill="currentColor" stroke="none"/>'),
   download: svg('<path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/>'),
   loop:  svg('<path d="m17 2 4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="m7 22-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/>'),
 };
 $('#kbToggle').innerHTML=ICON.keys;
+$('#helpBtn').innerHTML=ICON.help; $('#helpBtn').onclick=()=>openHelp();
 $('#namesBtn').onclick=()=>{ prog.settings.readNames=!prog.settings.readNames; saveProg(); updateUI(); };
 $('#viewBtn').onclick=()=>{ prog.settings.view = staffView() ? 'falling' : 'staff'; saveProg(); sheet=null; layout(); updateUI(); };
 $('#kbToggle').onclick=()=>{ prog.settings.staffKeys = prog.settings.staffKeys===false; saveProg(); layout(); updateUI(); };
@@ -2306,6 +2308,70 @@ function editPlayer(p){
 }
 function updateWhoBtn(){ const b=$('#whoBtn'); b.textContent=me().emoji; b.title=`${me().name} (switch player)`; }
 $('#whoBtn').onclick=()=>openWho();
+
+
+/* =====================================================================
+   Help: what every button does (shown with the buttons' real icons)
+   ===================================================================== */
+const HELP=[
+  ['Top bar',[
+    ['#homeBtn','Menu','Back to the menu: Home, Lessons, Songs, Practice and Progress. During a practice session it ends the session and shows a summary.'],
+    ['#whoBtn','Player','Who\'s playing. Tap to switch player or add one; each player has their own progress and settings.'],
+    ['#songsBtn','Songs','The song library, your own imported songs and your recordings.'],
+    ['#mode','Mode','<b>Wait for me</b>: the music stops until you play the right note. <b>Play along</b>: the music keeps going, so timing counts. <b>Listen</b>: Keys plays it for you.'],
+    ['#hands','Hands','Practise both hands, or just one while Keys plays the other.'],
+    ['#speed','Speed','Slow the music down (or speed it up). Slower is the fastest way to learn a hard part.'],
+    ['#viewBtn','Falling notes / sheet music','Switches between notes falling towards the keyboard and real sheet music scrolling past a line.','Shows up when a song, lesson or drill is open.'],
+    ['#namesBtn','Letter names','In reading practice, shows the letter name on every note instead of only after you play it.','Shows up in the Read the note drill and Reading music lessons.'],
+    ['#kbToggle','Keyboard','Hides or shows the keyboard under the sheet music, so you read from the staff only.','Shows up in the sheet-music view.'],
+    ['#lessonBtn','Read the lesson','Opens the lesson\'s explanation and theory again.','Shows up while a lesson is open.'],
+    ['#marksBtn','Saved parts','Jump to, loop, rename or delete the parts you saved in this song, or save the current spot.'],
+    ['#recBtn','Record','Records what you play. In a song it also starts the song; press again to stop. Recordings are under Songs → Your recordings.'],
+    ['#metro','Metronome','A click on every beat, with an accent on the first beat of each bar.'],
+    ['#sound','Hear the song','In Play along, also play the song\'s notes, so you hear the melody while you play.'],
+    ['#fancy','Realistic piano','Uses a realistic piano sound instead of the simple synthesizer. The first time it takes a few seconds to prepare.'],
+    ['#labels','Letter size','How big the note names and finger numbers are, or turn them off.'],
+    ['#fs','Fullscreen','Uses the whole screen and turns it sideways on a phone.'],
+    ['#midi','Piano connection','Shows whether your piano is connected over USB/MIDI. Tap to try connecting again.'],
+  ]],
+  ['Playback bar',[
+    ['#tStart','Back to start','Goes back to the beginning (or to the start of the part you\'re looping).'],
+    ['#tBack','Back 5 seconds','Jumps back 5 seconds.'],
+    ['#play','Start / pause','Starts, pauses or resumes the music.'],
+    ['#tFwd','Forward 5 seconds','Jumps ahead 5 seconds.'],
+    ['#tl','Timeline','Drag it to move through the song. Yellow ticks are your saved parts, a red tint shows where you make mistakes.'],
+    ['#tLoop','Loop','You\'re looping a part. Tap ✕ to stop looping.','Shows up while a part is looping.'],
+    ['#tReplay','Replay','You\'re watching a recording. Tap ✕ to go back.','Shows up during a replay.'],
+    ['#tMark','Save this spot','Saves the current spot as a part you can jump to or loop later.'],
+  ]],
+];
+function helpIcon(sel){   // a small copy of the real button, so the help shows exactly what you see
+  const el=$(sel); if(!el) return '';
+  if(el.tagName==='SELECT') return `<span>${esc(el.options[el.selectedIndex]?el.options[el.selectedIndex].text:'')} ▾</span>`;
+  if(sel==='#tl') return '<span>━━●━━</span>';
+  if(sel==='#tLoop' && !loop) return `<span>${ICON.loop} ✕</span>`;
+  if(sel==='#tReplay' && !rp) return '<span>🎙 Replay ✕</span>';
+  const html=el.innerHTML.trim();
+  return `<span>${html || esc(el.textContent)}</span>`;
+}
+function openHelp(){
+  if(playing) togglePlay();
+  const rows=HELP.map(([group,items])=>`<h3>${group}</h3>`+items.map(([sel,name,text,when])=>{
+    const el=$(sel), shown=el && !el.hidden && !(el.closest('#transport')&&$('#transport').classList.contains('off'));
+    return `<div class="hrow${shown?'':' off'}"><div class="hicon">${helpIcon(sel)}</div><div><span class="hname">${name}</span><small>${text}</small>${when&&!shown?`<i class="when">${when}</i>`:''}</div></div>`; }).join('')).join('');
+  $('#helpCard').innerHTML=`<div class="kicker">Help</div><h2>What everything does</h2>
+    <p class="muted">The top bar scrolls sideways if it doesn't fit. Some buttons only appear when they're useful.</p>
+    ${rows}
+    <h3>Colours</h3><div class="legend"><span style="--c:var(--accent)">Right hand</span><span style="--c:var(--left)">Left hand</span><span style="--c:var(--good)">Played right</span><span style="--c:var(--bad)">Wrong or missed</span></div>
+    <h3>Computer keyboard</h3><div class="keys-list">
+      <kbd>Space</kbd><span>Start or pause</span><kbd>← →</kbd><span>Back or forward 5 seconds</span><kbd>Home</kbd><span>Back to the start</span>
+      <kbd>A W S E D F T G Y H U J K</kbd><span>Play C4 to C5 without a piano</span><kbd>Esc</kbd><span>Close a menu or card</span></div>
+    <div class="btns"><button class="primary" id="helpClose">Got it</button></div>`;
+  $('#helpClose').onclick=closeHelp;
+  $('#help').hidden=false; $('#help').scrollTop=0;
+}
+function closeHelp(){ $('#help').hidden=true; }
+$('#help').onclick=e=>{ if(e.target.id==='help') closeHelp(); };
 
 /* =====================================================================
    Boot
