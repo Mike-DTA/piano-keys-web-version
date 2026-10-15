@@ -9,6 +9,7 @@ const LEAD = 2.5;      // seconds of song-time before the first note
 const LOOK = 3;        // seconds of song-time visible above the keyboard
 const WIN = 0.25;      // play-along hit window (song seconds, either side)
 const EARLY = 1.0;     // wait mode: how early a note may be played
+const CHORD_SLACK = 0.1;   // wait mode: notes this soon after a chord (MIDI files from a real performance) count as part of it
 const PASS = 80;       // % needed to complete a lesson
 const NAMES = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
 const SPEEDS = [0.25,0.4,0.5,0.6,0.7,0.8,0.9,1,1.1,1.25,1.5];
@@ -309,6 +310,14 @@ function setRange(a,b){
   layout();
 }
 function advanceGroups(){ while(gi<groups.length && groups[gi].notes.every(n=>n.hit||!n.req)) gi++; }
+/* Notes just after the current chord that belong to it: a hair later in the file, so in a group of their own,
+   but played together with it. They can be pressed with the chord instead of counting as wrong (and then
+   waiting for a key that's already down). */
+function chordFollowers(){
+  const g=groups[gi], out=[];
+  if(g) for(let j=gi+1; j<groups.length && groups[j].start-g.start<=CHORD_SLACK; j++) out.push(...groups[j].notes.filter(n=>n.req && !n.hit));
+  return out;
+}
 
 /* ---------- Layout & geometry ---------- */
 function layout(){
@@ -365,10 +374,12 @@ function click(accent){
 
 /* ---------- Input handling ---------- */
 function score(n){ n.hit=true; stats.hit++; stats.streak++; }
+// one press plays every copy of that key written at the same moment (e.g. both hands' parts holding the same note)
+function scoreKey(n,pool){ score(n); for(const x of pool) if(x!==n && x.midi===n.midi && x.req && !x.hit && Math.abs(x.start-n.start)<0.02) score(x); }
 function noteOn(m, src, vel=90){
   if(src!=='midi') tone(m,0.8);
   held.set(m,null);
-  let ok=null;
+  let ok=null, late;
   if(playing && mode==='wait'){
     advanceGroups();
     const g=groups[gi];
@@ -380,15 +391,16 @@ function noteOn(m, src, vel=90){
           ok=true;
           // Chords: count only once all keys are down together
           if(together && need.length>1){ if(need.every(x=>held.has(x.midi))) need.forEach(score); }
-          else score(n);
+          else scoreKey(n, [...g.notes, ...chordFollowers()]);
         } else if(g.notes.some(n=>n.midi===m)) ok=true;
+        else if((late=chordFollowers().find(x=>x.midi===m))){ ok=true; scoreKey(late, chordFollowers()); }   // part of the chord, just written a hair later
         else { ok=false; g.wrong++; if(song.hidden && g.wrong>=2) g.reveal=true; }
       } else ok=false;
     }
   } else if(playing && mode==='play'){
     let best=null, bd=WIN;
     for(const n of notes){ if(n.start>t+WIN) break; if(n.req && n.midi===m && !n.hit && !n.missed){ const d=Math.abs(n.start-t); if(d<=bd){ bd=d; best=n; } } }
-    if(best){ score(best); ok=true; } else ok=false;
+    if(best){ scoreKey(best, notes.slice(Math.max(0,si-64), si+64)); ok=true; } else ok=false;
   }
   if(ok===false){ stats.wrong++; stats.streak=0; heatMiss(t); }
   stats.bestStreak=Math.max(stats.bestStreak,stats.streak);
@@ -949,7 +961,7 @@ function draw(){
   cx.fillStyle = waiting ? C.accent : 'rgba(255,255,255,0.25)'; cx.fillRect(0,kbTop-2,W,2);
 
   const target=new Map(), sounding=new Map(), g=groups[gi];
-  if(mode==='wait' && g && g.start-t<=EARLY && (!hidden || g.reveal)) g.notes.forEach(n=>{ if(n.req && !n.hit) target.set(n.midi,n); });
+  if(mode==='wait' && g && g.start-t<=EARLY && (!hidden || g.reveal)) [...g.notes, ...(hidden?[]:chordFollowers())].forEach(n=>{ if(n.req && !n.hit && !target.has(n.midi)) target.set(n.midi,n); });
   if(playing && !(hidden && mode==='listen')) for(let i=Math.max(0,si-64);i<si;i++){ const n=notes[i]; if(!n.req && n.start<=t && n.start+n.dur>t) sounding.set(n.midi,n); }
   const pulse = 0.55+0.45*Math.sin(performance.now()/180);
   const handCol=n=>n.hand==='L'?C.left:C.accent;
