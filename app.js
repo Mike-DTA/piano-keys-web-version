@@ -66,7 +66,8 @@ function prep(d){
     else d.notes=main;
     if(main.bars.length) d.bars=main.bars;
   }
-  if(d.bpm && !d.q) d.q=60/d.bpm*(d.pulse===3?2:(d.pulse||1));   // seconds per quarter note (6/8 is written in eighths, fast pieces in eighths or sixteenths)
+  if(d.bpm && !d.q) d.q=60/d.bpm*(d.pulse===3?2:(d.pulse||1));
+  if(d.view==='staff' && d.keySig==null) d.keySig=0;   // reading practice is written in C: sharps and flats appear on the notes   // seconds per quarter note (6/8 is written in eighths, fast pieces in eighths or sixteenths)
   d.mode=d.mode||'wait'; d.skills=d.skills||[];
   const sp=d.split||60, hd=n=>n.hand||(n.midi<sp?'L':'R');
   d.both = d.notes.some(n=>hd(n)==='L') && d.notes.some(n=>hd(n)==='R');
@@ -697,7 +698,7 @@ const POS = {
   d:  {label:'Right hand · D position', notes:['D4','E4','F#4','G4','A4'], f:[1,2,3,4,5], skills:['pos','black'], need:'s2'},
   oct:{label:'Whole octave C–C', notes:['C4','D4','E4','F4','G4','A4','B4','C5'], f:null, skills:['c-r','scales'], need:'b7'},
 };
-function drillItem(def,title,regen,sub){ def.title=title; prep(def); return {kind:'drill', def, title, sub:sub||'🏋 Drill', tip:def.tip, regen}; }
+function drillItem(def,title,regen,sub){ def.title=title; if(def.keySig==null) def.keySig=0; prep(def); return {kind:'drill', def, title, sub:sub||'🏋 Drill', tip:def.tip, regen}; }
 const dmode=m=>m||prog.settings.drillMode||'wait';
 
 function genNotes(v,count=16,m){
@@ -1171,7 +1172,8 @@ function engrave(){   // worked out once per song: key, bars, chords per hand wi
       e.slot=slot; run.push(e);
     }
     flush();
-    // rests where this hand is silent for a beat or more
+    // rests where this hand is silent for a beat or more (not in reading practice, where the hands take turns)
+    if(song.view==='staff') continue;
     const add=(t,len)=>{ let c=t, left=len; while(left>=0.95*q){ const two=left>=1.95*q; rests.push({t:c, hand, kind:two?'h':'q'}); c+=two?2*q:q; left-=two?2*q:q; } };
     for(let b=0;b<=bars.length;b++){
       const b0=barStart(b), b1=b<bars.length?bars[b]:Math.max(b0+barLen,songEnd); if(b0>songEnd) break;
@@ -1254,7 +1256,7 @@ function drawStaff(){
       if(musicFontReady){ cx.font=font; cx.textAlign='center'; cx.textBaseline='alphabetic';
         if(h.show!==null) cx.fillText(h.show>0?SMUFL.sharp:h.show<0?SMUFL.flat:SMUFL.natural, x-sp*1.9, y);
         if(e.val[2]) cx.fillText(SMUFL.dot, hx+sp*1.25, (h.d-base)%2===0 ? y-sp/2 : y); }   // a dot sits in a space
-      const label = reading ? ((h.n.hit && h.n.req) || (e.notes.includes(h.n) && g && h.n.g===g && g.reveal) ? noteLabel(h.n) : '') : (labelScale ? noteLabel(h.n) : '');
+      const label = reading ? (prog.settings.readNames || (h.n.hit && h.n.req) || (g && h.n.g===g && g.reveal) ? noteLabel(h.n) : '') : (labelScale ? noteLabel(h.n) : '');   // reading practice: names after you play, or always if switched on
       if(label){ cx.font=`700 ${Math.round(sp*1.15*Math.max(1,labelScale))}px system-ui,sans-serif`; cx.textAlign='left'; cx.textBaseline='middle'; cx.fillText(label, hx+sp*(e.val[2]?1.9:1.05), y+(e.up?sp*.9:-sp*.9)); }
     });
     if(e.val[1]!=='w'){   // stem, and a flag unless it's beamed
@@ -1295,6 +1297,8 @@ function updateUI(){
   $('#tReplay').hidden=!rp; if(rp) $('#tReplay').innerHTML=`<span>🎙 Replay ✕</span>`;
   $('#recBtn').hidden=!!rp; updateRecBtn();
   $('#lessonBtn').hidden=!(cur && cur.lesson) || !!rp;
+  const nb=$('#namesBtn'); nb.hidden=!readingItem(); nb.classList.toggle('on',!!prog.settings.readNames);
+  nb.title = prog.settings.readNames ? 'Letter names are always shown (tap to show them only after you play)' : 'Show letter names on every note';
   const kt=$('#kbToggle'); kt.hidden=!staffView();
   const vb=$('#viewBtn'), canSwitch=!!song && notes.length>0 && !song.hidden && song.view!=='staff';
   vb.hidden=!canSwitch; if(canSwitch){ const sv=staffView(); vb.innerHTML=sv?ICON.falling:ICON.sheet; vb.title=sv?'Show falling notes':'Show sheet music'; vb.setAttribute('aria-label',vb.title); } kt.classList.toggle('on', prog.settings.staffKeys!==false);
@@ -1347,6 +1351,7 @@ const ICON={
   loop:  svg('<path d="m17 2 4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="m7 22-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/>'),
 };
 $('#kbToggle').innerHTML=ICON.keys;
+$('#namesBtn').onclick=()=>{ prog.settings.readNames=!prog.settings.readNames; saveProg(); updateUI(); };
 $('#viewBtn').onclick=()=>{ prog.settings.view = staffView() ? 'falling' : 'staff'; saveProg(); sheet=null; layout(); updateUI(); };
 $('#kbToggle').onclick=()=>{ prog.settings.staffKeys = prog.settings.staffKeys===false; saveProg(); layout(); updateUI(); };
 $('#lessonBtn').innerHTML=ICON.book; $('#lessonBtn').onclick=()=>{ if(cur&&cur.lesson) showIntro(cur.lesson,cur,true); };

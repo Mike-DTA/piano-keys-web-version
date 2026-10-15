@@ -78,7 +78,7 @@ Connect the piano with a USB-OTG cable and allow MIDI access.
     hand coordination, play by ear (notes hidden; key shown after 2 misses), pop chords. Wait or play-along mode.
   - *Read the note* (🎼): notes on a real grand staff (treble and bass clef) scroll past a playhead. Find each one
     without hints: a wrong key shows as a red note on the staff, after two tries the key lights up, and played notes
-    turn green with their name. Levels: treble C position, treble white keys, bass C position, bass white keys,
+    turn green with their name (the **A–G** button shows names on every note while you're learning). Levels: treble C position, treble white keys, bass C position, bass white keys,
     both clefs, sharps and flats. In this view the keyboard can be hidden with the keyboard button in the top bar.
   - *Pop chords*: the progressions behind countless hits (I–V–vi–IV, '50s, vi–IV–I–V, three-chord rock,
     Andalusian, 12-bar blues) with right-hand chords and a left-hand bass note, in a random style each time:
