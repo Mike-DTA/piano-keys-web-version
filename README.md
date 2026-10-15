@@ -50,11 +50,13 @@ Connect the piano with a USB-OTG cable and allow MIDI access.
   | Musician | Für Elise, complete (Beethoven) | level 21 |
   | Virtuoso | Rondo alla Turca (Mozart) | level 28 |
   | Maestro | Maple Leaf Rag (Joplin) | level 36 |
-- **🎓 Lessons:** 58 lessons in 7 courses: Basics, Rhythm, Chords, Scales & keys, Music theory, Two hands, Songs.
+- **🎓 Lessons:** 68 lessons in 8 courses: Basics, Rhythm, Reading music, Chords, Scales & keys, Music theory, Two hands, Songs.
   Pass with 80% (★ 80, ★★ 90, ★★★ 97). Chord lessons require all chord keys held together.
   The Lessons screen has a search that also looks inside the lessons, so topics like "waltz" or "F sharp" find them.
   Every lesson intro has **Learn more**: the theory behind it, how to practise, and common mistakes. Reopen it any time
   with **📖 Read lesson** on the result card or the book button in the top bar.
+  The **🎼 Reading music** course is played on a grand staff: the treble and bass clef (with memory aids), landmark
+  notes, ledger lines, steps and skips, note values, sharps and flats, a real melody and reading both staves.
   The **📘 Music theory** course covers the musical alphabet, half/whole steps, intervals, building major scales,
   key signatures and the circle of fifths, how chords are built, Roman numerals, time signatures (6/8),
   the harmonic minor and cadences, each with an exercise.
