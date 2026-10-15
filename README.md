@@ -34,22 +34,29 @@ Connect the piano with a USB-OTG cable and allow MIDI access.
   *Who's playing?* (and asks again after 20 minutes away); switch any time from the name button in the menu
   or the avatar in the keyboard bar. Add, rename (with an avatar) or delete players there.
 - **🏠 Home:** level & XP, title, day streak, daily-goal ring, *Today's practice*, continue learning, review.
-- **🎓 Title tests:** titles aren't given for levels; you earn them. Each one is a real piece, played as a test: the whole
+- **🎓 Title tests:** titles aren't given for levels; you earn them, starting from Unranked. Each one is a real piece, played as a test: the whole
   song, both hands, in Play along at full speed, with 90% or more. When you reach a test's level, an **Attempt**
   button on the profile card (Home and Progress) starts it. A title once earned is never lost.
   All tests are also listed at the bottom of Songs (no filter chip), where any of them can be played any time:
   passing one before its level earns the title too, so experienced players can catch up right away.
-  Practise it opens the same piece in its normal category.
+  Practise it opens the same piece in its normal category. The pieces start easy and get harder faster towards the
+  top (each about 23% harder than the last, by a difficulty score from speed, busiest stretch, chords, left hand and length).
 
   | Title | Test | Offered at |
   |---|---|---|
-  | Novice | Minuet in A minor (Bach) | level 3 |
-  | Apprentice | L'Arabesque (Burgmüller) | level 6 |
-  | Player | Träumerei (Schumann) | level 10 |
-  | Performer | Sonatina in C, 1st movement (Kuhlau) | level 15 |
-  | Musician | Für Elise, complete (Beethoven) | level 21 |
-  | Virtuoso | Rondo alla Turca (Mozart) | level 28 |
-  | Maestro | Maple Leaf Rag (Joplin) | level 36 |
+  | Rookie | Ode to Joy (Beethoven) | level 3 |
+  | Novice | Korobeiniki (Russian folk song, the Tetris theme) | level 6 |
+  | Apprentice | Für Elise, the famous opening (Beethoven) | level 10 |
+  | Player | Can-Can (Offenbach) | level 15 |
+  | Performer | Prelude in C (Bach) | level 21 |
+  | Musician | Rondo alla Turca (Mozart) | level 28 |
+  | Virtuoso | Sonatina in C, 1st movement (Kuhlau) | level 36 |
+  | Maestro | Maple Leaf Rag (Joplin) | level 45 |
+
+  A title earned with a test from the first version of this list is kept, even where that piece now gives a lower title.
+
+  The tests that are MIDI files (Rondo alla Turca, the Sonatina, the Maple Leaf Rag), like all MIDI songs, only load
+  when Keys is opened from a web address (the online version, or a local server), not as a file on disk.
 - **🎓 Lessons:** 68 lessons in 8 courses: Basics, Rhythm, Reading music, Chords, Scales & keys, Music theory, Two hands, Songs.
   Pass with 80% (★ 80, ★★ 90, ★★★ 97). Chord lessons require all chord keys held together.
   The Lessons screen has a search that also looks inside the lessons, so topics like "waltz" or "F sharp" find them.

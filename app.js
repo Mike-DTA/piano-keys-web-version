@@ -14,21 +14,27 @@ const PASS = 80;       // % needed to complete a lesson
 const NAMES = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
 const SPEEDS = [0.25,0.4,0.5,0.6,0.7,0.8,0.9,1,1.1,1.25,1.5];
 const INTERVALS = [1,2,4,7,14,30,60];          // review intervals in days
-const TITLES = ['Beginner','Novice','Apprentice','Player','Performer','Musician','Virtuoso','Maestro'];
-/* Title tests: every title after Beginner is earned by playing a real piece from the song library: the whole song,
+const TITLES = ['Unranked','Rookie','Novice','Apprentice','Player','Performer','Musician','Virtuoso','Maestro'];
+/* Title tests: every title after Unranked is earned by playing a real piece from the song library: the whole song,
    both hands, in Play along at full speed, with TEST_PASS% or more. The profile card offers each test from its level
    (each step one level longer than the last: 3, 6, 10, 15 …); at the bottom of Songs they can be played any time,
-   and passing one early counts too. A title, once earned, is never lost. */
+   and passing one early counts too. A title, once earned, is never lost.
+   The pieces start easy and get harder faster towards the top: each is about 23% harder than the one before, going by
+   how busy the busiest stretch is, overall speed, notes per press, how much the left hand does, and length. */
 const TEST_PASS = 90;
-const TESTS = [
-  {song:'bach-minuet-a-minor', level:3},     // Novice
-  {song:'burgmuller-arabesque', level:6},    // Apprentice
-  {song:'traumerei', level:10},              // Player
-  {song:'kuhlau-sonatina', level:15},        // Performer
-  {song:'fur-elise-full', level:21},         // Musician
-  {song:'rondo-alla-turca', level:28},       // Virtuoso
-  {song:'maple-leaf-rag', level:36},         // Maestro
+const TESTS = [                              // difficulty
+  {song:'ode-to-joy', level:3},              //  6.9  Rookie
+  {song:'korobeiniki', level:6},             //  8.3  Novice
+  {song:'fur-elise', level:10},              // 10.5  Apprentice
+  {song:'can-can', level:15},                // 12.4  Player
+  {song:'prelude-in-c', level:21},           // 14.7  Performer
+  {song:'rondo-alla-turca', level:28},       // 19.1  Musician
+  {song:'kuhlau-sonatina', level:36},        // 23.2  Virtuoso
+  {song:'maple-leaf-rag', level:45},         // 28.8  Maestro
 ].map((t,i)=>({...t, id:'test:'+t.song, rank:i+1, title:TITLES[i+1]}));
+// the first ladder: a test passed back then still holds the title it gave (the higher one, if it's still a test)
+const OLD_TESTS = {'test:bach-minuet-a-minor':'Novice', 'test:burgmuller-arabesque':'Apprentice', 'test:traumerei':'Player', 'test:kuhlau-sonatina':'Performer',
+  'test:fur-elise-full':'Musician', 'test:rondo-alla-turca':'Virtuoso', 'test:maple-leaf-rag':'Maestro'};
 
 /* ---------- Notation ---------- */
 function nameToMidi(s){
@@ -173,7 +179,8 @@ const totalSec=()=>Object.values(prog.days).reduce((s,d)=>s+d.sec,0);
 const lvlNeed=L=>50*L*(L-1);
 function levelInfo(xp){ let L=1; while(xp>=lvlNeed(L+1)) L++; return {L, cur:xp-lvlNeed(L), need:lvlNeed(L+1)-lvlNeed(L)}; }
 const testPassed=(T,p=prog)=>!!(p.tests&&p.tests[T.id]&&p.tests[T.id].passed);
-const titleRank=(p=prog)=>TESTS.reduce((r,T)=>testPassed(T,p)?Math.max(r,T.rank):r,0);   // the highest test passed
+const titleRank=(p=prog)=>Math.max(TESTS.reduce((r,T)=>testPassed(T,p)?Math.max(r,T.rank):r,0),   // the highest test passed
+  ...Object.entries(OLD_TESTS).map(([id,t])=>p.tests&&p.tests[id]&&p.tests[id].passed ? TITLES.indexOf(t) : 0));
 const titleOf=(p=prog)=>TITLES[titleRank(p)];
 const aTitle=t=>(/^(<b>)?[AEIOU]/.test(t)?'an ':'a ')+t;   // "an Apprentice", "a Novice"
 const testOpen=T=>levelInfo(prog.xp).L>=T.level;
@@ -253,7 +260,7 @@ function checkAch(){ for(const a of ACH) if(!prog.ach[a.id] && a.t()){ prog.ach[
 /* ---------- Toasts ---------- */
 function toast(msg){
   const el=document.createElement('div'); el.className='toast'; el.textContent=msg;
-  $('#toasts').appendChild(el); setTimeout(()=>el.remove(), 3200);
+  $('#toasts').appendChild(el); setTimeout(()=>el.remove(), Math.max(3200, msg.length*60));   // long messages stay up long enough to read
 }
 
 /* =====================================================================
@@ -1535,7 +1542,11 @@ async function songDef(e){   // notes are parsed (or the MIDI file fetched) the 
   let d;
   if(e.mine){ const M=e.mine; d={notes:handsFor(M), beat:M.beat, meter:M.meter, q:M.q, ts:M.ts, keySig:M.keySig, bars:M.bars}; }
   else if(e.mid){
-    const r=await fetch(e.mid); if(!r.ok) throw new Error('Could not load '+e.mid);
+    // browsers don't let a page opened from a file on disk fetch other files, so MIDI songs need Keys at a web address
+    const r=await fetch(e.mid).catch(()=>{ throw new Error(/^https?:$/.test(location.protocol)
+      ? `Could not load ${e.title}. Check your internet connection.`
+      : `${e.title} is a MIDI file, and browsers only load those when Keys is opened from a web address (the online version, or a local server), not as a file on disk.`); });
+    if(!r.ok) throw new Error('Could not load '+e.mid);
     const p=parseMidiFile(await r.arrayBuffer());
     if(e.hands==='tracks'){   // one track per staff (e.g. Mutopia files): the track with the higher average pitch is the right hand
       const avg=t=>{ const m=p.notes.filter(n=>n.track===t.index); return m.reduce((s,n)=>s+n.midi,0)/m.length; };
