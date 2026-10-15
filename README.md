@@ -31,7 +31,7 @@ your progress, with separate profiles for everyone in the house.
 | `sw.js`, `manifest.json`, icons | Install as an app / offline |
 | `fonts/` | Bravura music font for the staff (SIL Open Font License) |
 | `midi/` | MIDI files for the piano originals (Mutopia Project, public domain) |
-| `docs/screenshots/` | Images for this README (not used by the app) |
+| `docs/screenshots/`, `docs/tools/` | Images for this README, and the script that retakes them (not used by the app) |
 
 To update a hosted copy, upload all files and folders (at least `index.html`, `content.js`, `songs.js`, `app.js`,
 `fancy-piano.js`, `sw.js`, `fonts/` and `midi/`).
