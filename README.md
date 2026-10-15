@@ -1,6 +1,24 @@
 # Keys – piano practice web app
 
-Falling-notes piano trainer for Chrome on Android, using your digital piano over USB MIDI (Web MIDI API).
+Piano trainer for Chrome on Android (and desktop), using your digital piano over USB MIDI (Web MIDI API).
+Play songs and lessons as falling notes or as real scrolling sheet music, learn to read the staff, and track
+your progress, with separate profiles for everyone in the house.
+
+![Falling notes](docs/screenshots/falling-notes.jpg)
+
+## Screenshots
+| | |
+|---|---|
+| ![Sheet music view](docs/screenshots/sheet-music.jpg) | ![Read the note drill](docs/screenshots/read-the-note.jpg) |
+| **Sheet music view:** any song, lesson or drill on a scrolling grand staff | **Read the note:** find each note on the staff; a wrong key shows in red |
+| ![Home screen](docs/screenshots/home.jpg) | ![Who's playing?](docs/screenshots/players.jpg) |
+| **Home:** level, streak, daily goal and today's practice | **Players:** everyone gets their own progress and settings |
+| ![Songs](docs/screenshots/songs.jpg) | ![Lesson with theory](docs/screenshots/lesson-theory.jpg) |
+| **Songs:** 71 public-domain pieces, saved parts, search and filters | **Lessons:** 68 lessons, each with the theory behind it |
+| ![Mistake heatmap](docs/screenshots/mistake-heatmap.jpg) | ![Progress](docs/screenshots/progress.jpg) |
+| **Where you make mistakes:** tap a hot spot to loop it | **Progress:** XP, streaks, minutes, course stars and skills |
+| ![Help](docs/screenshots/help.jpg) | |
+| **Help:** what every button in the top bar does | |
 
 ## Files
 | File | What's in it |
@@ -9,10 +27,14 @@ Falling-notes piano trainer for Chrome on Android, using your digital piano over
 | `content.js` | Courses and lessons, skills, learning path |
 | `songs.js` | Song library (public domain), loaded only when needed |
 | `app.js` | Engine, progress, drills, sessions, screens |
+| `fancy-piano.js` | The realistic piano sound (from MIDI-Creator) |
 | `sw.js`, `manifest.json`, icons | Install as an app / offline |
 | `fonts/` | Bravura music font for the staff (SIL Open Font License) |
+| `midi/` | MIDI files for the piano originals (Mutopia Project, public domain) |
+| `docs/screenshots/` | Images for this README (not used by the app) |
 
-To update a hosted copy, upload all files (at least `index.html`, `content.js`, `songs.js`, `app.js`, `sw.js`).
+To update a hosted copy, upload all files and folders (at least `index.html`, `content.js`, `songs.js`, `app.js`,
+`fancy-piano.js`, `sw.js`, `fonts/` and `midi/`).
 
 ## Run it on your phone
 Web MIDI needs a secure context (https or localhost).
@@ -21,10 +43,11 @@ Web MIDI needs a secure context (https or localhost).
 
 **Option B (local dev over USB):**
 ```
-npx serve .              # serves on :3000
+python3 -m http.server 3000     # or: npx serve .
 adb reverse tcp:3000 tcp:3000
 ```
 Then open `http://localhost:3000` in Chrome on the phone. Debug via `chrome://inspect`.
+On a computer, the same server works directly: open `http://localhost:3000` in Chrome.
 
 Connect the piano with a USB-OTG cable and allow MIDI access.
 
@@ -72,7 +95,7 @@ Connect the piano with a USB-OTG cable and allow MIDI access.
 - **🏋 Practice**
   - *Mixed session* (5–45 min): warm-up → new lessons → review and drills interleaved → a song,
     with a short countdown between exercises and a summary at the end.
-  - *Focus session*: same, limited to one topic (basics, rhythm, chords, scales, two hands, ear, songs).
+  - *Focus session*: same, limited to one topic (basics, rhythm, chords, scales, two hands, ear, reading, songs).
   - *Review*: spaced repetition, so lessons come back after 1, 2, 4, 7, 14, 30, 60 days (sooner if you slip).
   - *Drills*: randomly generated each time: note finder, chord changes, rhythm reading, scale runs,
     hand coordination, play by ear (notes hidden; key shown after 2 misses), pop chords. Wait or play-along mode.
@@ -85,7 +108,7 @@ Connect the piano with a USB-OTG cable and allow MIDI access.
     held, four beats, pop rhythm 3+3+2 or broken chords. Shows well-known songs that use each progression.
   - *Speed trainer*: play-along starting slow; each run ≥ 90% speeds up until your goal speed.
 - **📈 Progress:** XP/levels, streaks, practice minutes (14-day chart), per-course stars,
-  per-skill accuracy, 26 achievements, recent activity, daily goal setting.
+  per-skill accuracy, 30 achievements, recent activity, daily goal setting.
   **Export/Import backup** moves the current player's progress between devices (stored in the browser otherwise).
 - **Playback controls:** a timeline under the top bar you can drag (the notes glide along and snap into place
   when you let go), back to start, ±5 seconds (also ← / →, Home), play/pause. Starting partway through is a
@@ -112,8 +135,9 @@ Connect the piano with a USB-OTG cable and allow MIDI access.
   keyboard below can be hidden. Simplifications: one voice per hand, and no ties across bar lines.
 - **❓ Help:** the ? button at the end of the top bar explains every button (with its icon), the colours and the
   computer-keyboard shortcuts. Buttons that only appear in some situations say when.
-- **Keyboard view:** hands (practise one hand while the app plays the other), speed, 🥁 metronome
-  (accent on beat 1, count-in), sound, note names/fingers with adjustable size (Aa off/S/M/L/XL, saved per player), fullscreen.
+- **Top bar while playing:** mode (Wait for me / Play along / Listen), hands (practise one hand while the app plays
+  the other), speed, 🥁 metronome (accent on beat 1, count-in), sound, note names/fingers with adjustable size
+  (Aa off/S/M/L/XL, saved per player), fullscreen.
 - **🎹 Realistic piano:** the button next to 🔊 switches every sound in Keys (your key presses, the song, Listen and
   replays) to MIDI-Creator's "Fancy" piano: each key, its soundboard, the ringing top strings and a hall are calculated
   on your device (a few seconds, the first time per visit; nothing is downloaded). Saved per player. The code is in
@@ -179,8 +203,10 @@ Add an entry to a course in `COURSES` (content.js), its id to `PATH`, and its th
 ```
 {id, title, text:[...], tip, src, bpm, mode:'wait'|'play', together:true, metro:true, meter:3, split:60, skills:['chords']}
 ```
-`split` is the MIDI note where the right hand starts (60 = middle C). `skills` come from `SKILLS`
-and drive mastery tracking, focus sessions and which drills unlock.
+`split` is the MIDI note where the right hand starts (60 = middle C). Instead of `src` a lesson can give the hands
+separately as `rh` and `lh` (as songs do). `view:'staff'` always shows the lesson on the grand staff, as a reading
+exercise (like the Reading music course). `skills` come from `SKILLS` and drive mastery tracking, focus sessions and
+which drills unlock.
 
 ## Tuning (top of app.js)
 `LOOK` (seconds visible), `WIN` (hit window), `EARLY` (wait-mode early window), `PASS`, `INTERVALS` (review days).
