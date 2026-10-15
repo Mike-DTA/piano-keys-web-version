@@ -16,17 +16,18 @@ const SPEEDS = [0.25,0.4,0.5,0.6,0.7,0.8,0.9,1,1.1,1.25,1.5];
 const INTERVALS = [1,2,4,7,14,30,60];          // review intervals in days
 const TITLES = ['Beginner','Novice','Apprentice','Player','Performer','Musician','Virtuoso','Maestro'];
 /* Title tests: every title after Beginner is earned by playing a real piece from the song library: the whole song,
-   both hands, in Play along at full speed, with TEST_PASS% or more. Each test unlocks at a level; a title, once
-   earned, is never lost. They show up as their own category in Songs. */
+   both hands, in Play along at full speed, with TEST_PASS% or more. The profile card offers each test from its level
+   (each step one level longer than the last: 3, 6, 10, 15 …); at the bottom of Songs they can be played any time,
+   and passing one early counts too. A title, once earned, is never lost. */
 const TEST_PASS = 90;
 const TESTS = [
   {song:'bach-minuet-a-minor', level:3},     // Novice
-  {song:'burgmuller-arabesque', level:5},    // Apprentice
-  {song:'traumerei', level:7},               // Player
-  {song:'kuhlau-sonatina', level:9},         // Performer
-  {song:'fur-elise-full', level:11},         // Musician
-  {song:'rondo-alla-turca', level:13},       // Virtuoso
-  {song:'maple-leaf-rag', level:15},         // Maestro
+  {song:'burgmuller-arabesque', level:6},    // Apprentice
+  {song:'traumerei', level:10},              // Player
+  {song:'kuhlau-sonatina', level:15},        // Performer
+  {song:'fur-elise-full', level:21},         // Musician
+  {song:'rondo-alla-turca', level:28},       // Virtuoso
+  {song:'maple-leaf-rag', level:36},         // Maestro
 ].map((t,i)=>({...t, id:'test:'+t.song, rank:i+1, title:TITLES[i+1]}));
 
 /* ---------- Notation ---------- */

@@ -43,12 +43,12 @@ Connect the piano with a USB-OTG cable and allow MIDI access.
   | Title | Test | Offered at |
   |---|---|---|
   | Novice | Minuet in A minor (Bach) | level 3 |
-  | Apprentice | L'Arabesque (Burgmüller) | level 5 |
-  | Player | Träumerei (Schumann) | level 7 |
-  | Performer | Sonatina in C, 1st movement (Kuhlau) | level 9 |
-  | Musician | Für Elise, complete (Beethoven) | level 11 |
-  | Virtuoso | Rondo alla Turca (Mozart) | level 13 |
-  | Maestro | Maple Leaf Rag (Joplin) | level 15 |
+  | Apprentice | L'Arabesque (Burgmüller) | level 6 |
+  | Player | Träumerei (Schumann) | level 10 |
+  | Performer | Sonatina in C, 1st movement (Kuhlau) | level 15 |
+  | Musician | Für Elise, complete (Beethoven) | level 21 |
+  | Virtuoso | Rondo alla Turca (Mozart) | level 28 |
+  | Maestro | Maple Leaf Rag (Joplin) | level 36 |
 - **🎓 Lessons:** 58 lessons in 7 courses: Basics, Rhythm, Chords, Scales & keys, Music theory, Two hands, Songs.
   Pass with 80% (★ 80, ★★ 90, ★★★ 97). Chord lessons require all chord keys held together.
   The Lessons screen has a search that also looks inside the lessons, so topics like "waltz" or "F sharp" find them.
